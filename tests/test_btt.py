@@ -37,8 +37,11 @@ class BetterTouchToolTests(unittest.TestCase):
             self.assertEqual(len(item["BTTActionsToExecute"]), 1)
             action = item["BTTActionsToExecute"][0]
             self.assertEqual(action["BTTActionCategory"], 0)
-            self.assertEqual(action["BTTPredefinedActionType"], 137)
-            self.assertIn("curl", action["BTTTerminalCommand"])
+            self.assertEqual(action["BTTPredefinedActionType"], 206)
+            self.assertIn("curl", action["BTTShellTaskActionScript"])
+            self.assertEqual(
+                action["BTTShellTaskActionConfig"], "/bin/bash:::-c:::-:::"
+            )
             self.assertNotIn("BTTActionCategoryTouchRelease", item)
 
     def test_attention_sessions_sort_before_quota_and_active_after(self) -> None:
@@ -139,7 +142,7 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertEqual(added_payload["BTTTouchBarButtonName"], "● session")
         self.assertIn(
             "session-1.json",
-            added_payload["BTTActionsToExecute"][0]["BTTTerminalCommand"],
+            added_payload["BTTActionsToExecute"][0]["BTTShellTaskActionScript"],
         )
         persist.assert_called_once_with(0, "one")
         run_cli.reset_mock()

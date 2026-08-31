@@ -89,8 +89,9 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
         "BTTActionsToExecute": [
             {
                 "BTTActionCategory": 0,
-                "BTTPredefinedActionType": 137,
-                "BTTTerminalCommand": action,
+                "BTTPredefinedActionType": 206,
+                "BTTShellTaskActionScript": action,
+                "BTTShellTaskActionConfig": "/bin/bash:::-c:::-:::",
             }
         ],
         "BTTTriggerConfig": {
