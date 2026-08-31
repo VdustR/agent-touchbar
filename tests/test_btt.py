@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.btt import definitions, install_widgets, widget_uuid
+from codexbar_touchbar.btt import definitions, install_widgets, session_action, session_script, widget_uuid
 
 
 class BetterTouchToolTests(unittest.TestCase):
@@ -27,6 +27,14 @@ class BetterTouchToolTests(unittest.TestCase):
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
         names = [item["BTTWidgetName"] for item in definitions()]
         self.assertNotIn("Attention session", names)
+
+    def test_session_action_uses_identity_persisted_by_render(self) -> None:
+        render = session_script(1)
+        action = session_action(1)
+        self.assertIn("session-2.json", render)
+        self.assertIn("session-2.json", action)
+        self.assertIn("os.replace", render)
+        self.assertNotIn("/api/btt", action)
 
     def test_reducing_slot_count_removes_excess_widgets(self) -> None:
         with TemporaryDirectory() as temporary:

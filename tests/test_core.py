@@ -1,11 +1,33 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
-from codexbar_touchbar.core import compact_snapshot, quota_windows, session_sort_key
+from codexbar_touchbar.core import StateStore, compact_snapshot, quota_windows, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
+    def test_usage_refresh_preserves_failed_provider_cache(self) -> None:
+        store = StateStore()
+        store.usage.value = [
+            {"provider": "codex", "usage": {"primary": {"usedPercent": 10}}},
+            {"provider": "claude", "usage": {"primary": {"usedPercent": 20}}},
+        ]
+
+        def response(*args, **kwargs):
+            provider = args[2]
+            if provider == "claude":
+                raise OSError("temporary failure")
+            return [{"provider": provider, "usage": {"primary": {"usedPercent": 30}}}]
+
+        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+            store._refresh_usage()
+
+        providers = {item["provider"]: item for item in store.usage.value}
+        self.assertEqual(providers["claude"]["usage"]["primary"]["usedPercent"], 20)
+        self.assertEqual(providers["codex"]["usage"]["primary"]["usedPercent"], 30)
+        self.assertIn("claude", store.usage.error)
+
     def test_quota_windows_only_returns_reported_windows(self) -> None:
         provider = {
             "usage": {

@@ -95,17 +95,31 @@ class StateStore:
             self.sessions.refreshing = False
 
     def _refresh_usage(self) -> None:
-        value: list[dict[str, Any]] = []
+        with self.lock:
+            previous = {
+                item.get("provider"): item
+                for item in self.usage.value
+                if isinstance(item, dict) and isinstance(item.get("provider"), str)
+            }
+        current: dict[str, dict[str, Any]] = {}
         errors: dict[str, str] = {}
         for provider in PROVIDERS:
             try:
                 payload = run_codexbar("usage", "--provider", provider, "--format", "json")
                 if isinstance(payload, list):
-                    value.extend(payload)
+                    current.update(
+                        (item["provider"], item)
+                        for item in payload
+                        if isinstance(item, dict) and isinstance(item.get("provider"), str)
+                    )
             except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
                 errors[provider] = str(caught)
         with self.lock:
-            self.usage.value = value
+            self.usage.value = [
+                current.get(provider) or previous[provider]
+                for provider in PROVIDERS
+                if provider in current or provider in previous
+            ]
             self.usage.error = errors
             self.usage.updated_at = time.time()
             self.usage.refreshing = False

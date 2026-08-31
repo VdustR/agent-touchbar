@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import uuid
@@ -36,6 +37,10 @@ def icon_path(provider: str) -> str:
 
 def slot_state_path() -> Path:
     return data_dir() / "session-slots.json"
+
+
+def slot_action_path(index: int) -> Path:
+    return data_dir() / "actions" / f"session-{index + 1}.json"
 
 
 def previous_slot_count(default: int = 4) -> int:
@@ -103,11 +108,18 @@ def provider_action(provider: str) -> str:
 
 
 def session_script(index: int) -> str:
+    action_path = slot_action_path(index)
     return rf'''/usr/bin/curl -sf {BASE_URL}/api/btt | /usr/bin/python3 -c '
 import json,os,sys
 d=json.load(sys.stdin); s=d.get("sessions",[]); x=s[{index}] if len(s)>{index} else None
-if not x: print("")
+action_path={str(action_path)!r}
+if not x:
+ try: os.unlink(action_path)
+ except FileNotFoundError: pass
+ print("")
 else:
+ os.makedirs(os.path.dirname(action_path),exist_ok=True)
+ temporary=action_path+".tmp"; open(temporary,"w").write(json.dumps({{"id":x["id"]}})); os.replace(temporary,action_path)
  state=x.get("state") or "idle"; dot="●" if state=="active" else "○"
  name=x.get("sessionName") or x.get("projectName") or "session"; provider=x.get("provider") or "agent"
  bg="27, 75, 61, 255" if state=="active" else "27, 32, 40, 255"; fg="230, 250, 242, 255" if state=="active" else "190, 201, 214, 255"
@@ -119,8 +131,8 @@ else:
 
 
 def session_action(index: int) -> str:
-    return rf'''SESSION_ID=$(/usr/bin/curl -sf {BASE_URL}/api/btt | /usr/bin/python3 -c 'import json,sys; s=json.load(sys.stdin).get("sessions",[]); print(s[{index}]["id"] if len(s)>{index} else "")')
-if [ -n "$SESSION_ID" ]; then /usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data "{{\"id\":\"$SESSION_ID\"}}" {BASE_URL}/api/focus/session >/dev/null; fi'''
+    action_path = shlex.quote(str(slot_action_path(index)))
+    return rf'''if [ -s {action_path} ]; then /usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data-binary @{action_path} {BASE_URL}/api/focus/session >/dev/null; fi'''
 
 
 def definitions(session_slots: int = 4) -> list[dict]:
