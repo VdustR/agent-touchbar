@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codexbar-touchbar"
 version = "0"
-description = "Touch Bar controls for CodexBar sessions and usage limits on macOS"
+description = "Touch Bar controls for Codex Desktop tasks and coding-agent usage limits on macOS"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

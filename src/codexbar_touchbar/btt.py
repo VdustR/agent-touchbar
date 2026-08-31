@@ -8,7 +8,6 @@ import os
 import shlex
 import shutil
 import subprocess
-import tempfile
 import uuid
 from pathlib import Path
 
@@ -77,7 +76,7 @@ def validate_slot_count(value: int) -> int:
     return value
 
 
-def widget(name: str, script: str, action: str, width: int, order: int, interval: float) -> dict:
+def widget(name: str, action: str, width: int, order: int) -> dict:
     provider = next((item for item in PROVIDERS if name.lower().startswith(item)), None)
     result = {
         "BTTUUID": widget_uuid(name),
@@ -97,10 +96,12 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
         "BTTTriggerConfig": {
             "BTTTouchBarButtonColor": "20, 25, 32, 255",
             "BTTTouchBarFontColor": "235, 241, 248, 255",
-            "BTTTouchBarFontSize": 11,
+            "BTTTouchBarButtonFontSize": 11,
             "BTTTouchBarItemPadding": 6,
             "BTTTouchBarButtonWidth": width,
+            "BTTTouchBarButtonUseFixedWidth": 1,
             "BTTTouchBarButtonHeight": 28,
+            "BTTTouchBarButtonUseFixedHeight": 1,
             "BTTTouchBarAlwaysShowButton": True,
         },
     }
@@ -170,12 +171,9 @@ def display_sessions(snapshot: dict, session_slots: int) -> list[dict]:
     return [
         item
         for item in snapshot.get("sessions", [])
-        if item.get("provider") in PROVIDERS
+        if item.get("provider") == "codex"
         and item.get("state") in ATTENTION_STATES | {"active", "idle", "available"}
-        and (
-            item.get("source") == "desktopApp"
-            or (item.get("provider") == "antigravity" and item.get("source") == "appPresence")
-        )
+        and item.get("source") == "desktopApp"
     ][:session_slots]
 
 
@@ -185,6 +183,11 @@ def update_buttons(
     current = dict(button_updates(snapshot, session_slots))
     sessions = display_sessions(snapshot, session_slots)
     session_ids = {widget_uuid(f"Agent session {index + 1}") for index in range(session_slots)}
+    for index, session in enumerate(sessions):
+        current[widget_uuid(f"Agent session {index + 1}")] = {
+            **current[widget_uuid(f"Agent session {index + 1}")],
+            "_sessionId": session["id"],
+        }
     for index in range(session_slots):
         trigger_id = widget_uuid(f"Agent session {index + 1}")
         if trigger_id not in current and (previous is None or trigger_id in previous):
@@ -193,16 +196,13 @@ def update_buttons(
                 run_cli("delete_trigger", f"uuid={trigger_id}")
             slot_action_path(index).unlink(missing_ok=True)
     for trigger_id, payload in current.items():
+        visible_payload = {key: value for key, value in payload.items() if not key.startswith("_")}
         session_index = (
             next(i for i in range(session_slots) if widget_uuid(f"Agent session {i + 1}") == trigger_id)
             if trigger_id in session_ids
             else None
         )
         changed = previous is None or previous.get(trigger_id) != payload
-        if session_index is not None and not changed:
-            # The visible presentation is unchanged, so swapping only the
-            # opaque target keeps the label and action semantically aligned.
-            persist_session_action(session_index, sessions[session_index]["id"])
         if changed:
             if session_index is not None:
                 existing = trigger_payload(trigger_id)
@@ -211,22 +211,22 @@ def update_buttons(
                     # mouse triggers by BTT 6.x. Replace the full Touch Bar
                     # definition whenever the rendered presentation changes.
                     run_cli("delete_trigger", f"uuid={trigger_id}")
-                # Do not swap the target while an old presentation can still
-                # be tapped. After deletion succeeds, a failed add leaves no
-                # misleading trigger and the update loop retries the full add.
-                persist_session_action(session_index, sessions[session_index]["id"])
-                definition = session_definition(session_index)
-                definition.update(payload)
+                definition = session_definition(
+                    session_index, sessions[session_index]["id"]
+                )
+                definition.update(visible_payload)
                 definition["BTTTriggerConfig"] = {
-                    **session_definition(session_index)["BTTTriggerConfig"],
-                    **payload.get("BTTTriggerConfig", {}),
+                    **session_definition(
+                        session_index, sessions[session_index]["id"]
+                    )["BTTTriggerConfig"],
+                    **visible_payload.get("BTTTriggerConfig", {}),
                 }
                 run_cli("add_new_trigger", f"json={json.dumps(definition, ensure_ascii=False, separators=(',', ':'))}")
                 continue
             run_cli(
                 "update_trigger",
                 f"uuid={trigger_id}",
-                f"json={json.dumps(payload, separators=(',', ':'))}",
+                f"json={json.dumps(visible_payload, separators=(',', ':'))}",
             )
     return current
 
@@ -240,95 +240,34 @@ def trigger_payload(trigger_id: str) -> str:
     return lookup.stdout.strip()
 
 
-def session_definition(index: int) -> dict:
-    return widget(
-        f"Agent session {index + 1}", session_script(index), session_action(index), 132, 20 + index, 2.5
+def session_definition(index: int, session_id: str) -> dict:
+    definition = widget(
+        f"Agent session {index + 1}",
+        session_action(session_id),
+        132,
+        20 + index,
     )
-
-
-def persist_session_action(index: int, session_id: str) -> None:
-    action_path = slot_action_path(index)
-    action_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{action_path.name}.", dir=action_path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w") as stream:
-            stream.write(json.dumps({"id": session_id}, separators=(",", ":")))
-        temporary.replace(action_path)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
-def quota_script(provider: str) -> str:
-    return rf'''/usr/bin/curl -sf {BASE_URL}/api/btt | /usr/bin/python3 -c '
-import json,os,sys,tempfile
-d=json.load(sys.stdin)
-p=next((x for x in d.get("providers",[]) if x.get("provider")=="{provider}"),None)
-if p:
- w=p.get("windows",[]); parts=[]; remaining=[]
- for x in w:
-  if x.get("usedPercent") is not None:
-   r=100-x["usedPercent"]; remaining.append(r); parts.append("{{}} {{:.0f}}%".format(x.get("label","limit"),r))
- c=p.get("sessionCounts")
- if isinstance(c,dict):
-  for state in ("active","idle"):
-   count=c.get(state)
-   if isinstance(count,int) and count>0: parts.append("{{}} {{}}".format(count,state))
- low=min(remaining) if remaining else None
- bg="55, 60, 68, 255" if low is None else ("30, 78, 64, 255" if low>=50 else ("112, 72, 22, 255" if low>=20 else "112, 35, 42, 255"))
- result={{"text":" · ".join(parts) or "—","background_color":bg,"font_color":"235, 248, 244, 255","font_size":11}}
- if os.path.isfile("{icon_path(provider)}"): result["icon_path"]="{icon_path(provider)}"
- print(json.dumps(result,ensure_ascii=False))
-' '''
+    # BTT 6.x dispatches dynamically added Touch Bar buttons through these
+    # legacy top-level fields. Static quota buttons work with the action array,
+    # but physical taps on runtime-added session buttons do not.
+    definition["BTTPredefinedActionType"] = 137
+    definition["BTTTerminalCommand"] = session_action(session_id)
+    return definition
 
 
 def provider_action(provider: str) -> str:
     return f'''/usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data '{{"provider":"{provider}"}}' {BASE_URL}/api/focus/provider >/dev/null'''
 
 
-def session_script(index: int) -> str:
-    action_path = slot_action_path(index)
-    python_action_path = json.dumps(str(action_path))
-    return rf'''/usr/bin/curl -sf {BASE_URL}/api/btt | /usr/bin/python3 -c '
-import json,os,sys
-d=json.load(sys.stdin); s=d.get("sessions",[]); x=s[{index}] if len(s)>{index} else None
-action_path={python_action_path}
-if not x:
- try: os.unlink(action_path)
- except FileNotFoundError: pass
- print("")
-else:
- os.makedirs(os.path.dirname(action_path),exist_ok=True)
- fd,temporary=tempfile.mkstemp(prefix="."+os.path.basename(action_path)+".",dir=os.path.dirname(action_path))
- try:
-  with os.fdopen(fd,"w") as f: f.write(json.dumps({{"id":x["id"]}}))
-  os.replace(temporary,action_path)
- except BaseException:
-  try: os.unlink(temporary)
-  except FileNotFoundError: pass
-  raise
- state=x.get("state") or "idle"; attention=state in {sorted(ATTENTION_STATES)!r}; dot="!" if attention else ("●" if state=="active" else "○")
- name=x.get("sessionName") or x.get("projectName") or "session"; provider=x.get("provider") or "agent"
- bg="112, 35, 42, 255" if attention else ("27, 75, 61, 255" if state=="active" else "27, 32, 40, 255"); fg="255, 236, 238, 255" if attention else ("230, 250, 242, 255" if state=="active" else "190, 201, 214, 255")
- icon="{data_dir()}/icons/"+provider+".png"
- result={{"text":f"{{dot}} {{name[:16]}}","background_color":bg,"font_color":fg,"font_size":11}}
- if os.path.isfile(icon): result["icon_path"]=icon
- print(json.dumps(result,ensure_ascii=False))
-' '''
-
-
-def session_action(index: int) -> str:
-    action_path = shlex.quote(str(slot_action_path(index)))
-    return rf'''if [ -s {action_path} ]; then /usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data-binary @{action_path} {BASE_URL}/api/focus/session >/dev/null; fi'''
+def session_action(session_id: str) -> str:
+    payload = shlex.quote(json.dumps({"id": session_id}, separators=(",", ":")))
+    return rf'''/usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data {payload} {BASE_URL}/api/focus/session >/dev/null'''
 
 
 def definitions(session_slots: int = 4) -> list[dict]:
     validate_slot_count(session_slots)
     result = [
-        widget(f"{provider.title()} usage", quota_script(provider), provider_action(provider), 172, 10 + index, 30)
+        widget(f"{provider.title()} usage", provider_action(provider), 172, 10 + index)
         for index, provider in enumerate(PROVIDERS)
     ]
     return result

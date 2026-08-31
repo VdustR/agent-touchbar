@@ -3,11 +3,12 @@ from __future__ import annotations
 import os
 import json
 import tempfile
+import sqlite3
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from codexbar_touchbar.core import StateStore, compact_snapshot, find_executable, quota_windows, session_sort_key
+from codexbar_touchbar.core import CAPABILITIES, StateStore, compact_snapshot, find_executable, quota_windows, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
@@ -35,14 +36,15 @@ class CoreTests(unittest.TestCase):
             ["/usr/bin/open", "codex://threads/thread%2Fid"], check=True, timeout=3
         )
 
-    def test_session_refresh_keeps_only_codex_sessions(self) -> None:
+    def test_session_refresh_only_overlays_native_codex_tasks(self) -> None:
         store = StateStore()
         sessions = [
             {"id": "codex", "provider": "codex", "state": "active", "source": "desktopApp"},
             {"id": "claude", "provider": "claude"},
             {"id": "antigravity", "provider": "antigravity"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_app_is_running", return_value=False):
+        native = [{"id": "codex", "provider": "codex", "state": "idle", "source": "desktopApp"}]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
             store._refresh_sessions()
         self.assertEqual(
             store.sessions.value,
@@ -56,9 +58,15 @@ class CoreTests(unittest.TestCase):
             {"id": None, "provider": "codex", "state": "idle", "source": "desktopApp"},
             {"id": "valid", "provider": "codex", "state": "active", "source": "desktopApp"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_app_is_running", return_value=False):
+        native = [{
+            "id": "valid",
+            "provider": "codex",
+            "state": "idle",
+            "source": "desktopApp",
+        }]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value, [{"id": "valid", "provider": "codex", "state": "active", "source": "desktopApp"}])
+        self.assertEqual([item["id"] for item in store.sessions.value], ["valid"])
 
     def test_session_refresh_rejects_non_list_payload(self) -> None:
         store = StateStore()
@@ -76,7 +84,7 @@ class CoreTests(unittest.TestCase):
             {"id": "2", "provider": "claude", "state": "idle"},
             {"id": "3", "provider": "claude", "state": "unknown"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=[]):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["claude"], {"active": 1, "idle": 1})
 
@@ -86,11 +94,95 @@ class CoreTests(unittest.TestCase):
             {"id": "invalid", "provider": "codex", "state": [], "source": "desktopApp"},
             {"id": "valid", "provider": "codex", "state": "active", "source": "desktopApp"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_app_is_running", return_value=False):
+        native = [{
+            "id": "valid",
+            "provider": "codex",
+            "state": "idle",
+            "source": "desktopApp",
+        }]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["codex"], {"active": 1, "idle": 0})
         self.assertFalse(store.sessions.refreshing)
         self.assertEqual([item["id"] for item in store.sessions.value], ["valid"])
+
+    def test_empty_native_registry_never_falls_back_to_codexbar_tasks(self) -> None:
+        store = StateStore()
+        runtime = [{
+            "id": "runtime-only",
+            "provider": "codex",
+            "state": "active",
+            "source": "desktopApp",
+        }]
+        with (
+            patch("codexbar_touchbar.core.run_codexbar", return_value=runtime),
+            patch.object(store, "_codex_desktop_sessions", return_value=[]),
+        ):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value, [])
+        self.assertEqual(store.session_counts["codex"], {"active": 0, "idle": 0})
+
+    def test_missing_native_registry_preserves_cached_tasks_and_reports_error(self) -> None:
+        store = StateStore()
+        store.sessions.value = [{"id": "cached", "provider": "codex", "state": "idle"}]
+        with (
+            patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CODEX_STATE_DB": "/missing/state.sqlite"}),
+            patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
+        ):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value[0]["id"], "cached")
+        self.assertIn("registry", store.sessions.error)
+
+    def test_codex_desktop_registry_adds_idle_visible_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "state.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute(
+                """CREATE TABLE threads (
+                    id TEXT, name TEXT, cwd TEXT, recency_at INTEGER,
+                    recency_at_ms INTEGER, archived INTEGER, source TEXT, preview TEXT
+                )"""
+            )
+            connection.executemany(
+                "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    ("active", "Active task", "/tmp/active", 20, 20000, 0, "vscode", "visible"),
+                    ("idle", "Idle task", "/tmp/idle", 10, 10000, 0, "vscode", "visible"),
+                    ("hidden", "Hidden", "/tmp/hidden", 30, 30000, 0, "exec", "visible"),
+                    ("archived", "Archived", "/tmp/archived", 40, 40000, 1, "vscode", "visible"),
+                ],
+            )
+            connection.commit()
+            connection.close()
+            sessions = [{
+                "id": "active", "provider": "codex", "state": "active",
+                "source": "desktopApp", "sessionName": "Runtime title",
+            }]
+            with (
+                patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CODEX_STATE_DB": str(database)}),
+                patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            ):
+                store = StateStore()
+                store._refresh_sessions()
+        self.assertEqual([item["id"] for item in store.sessions.value], ["active", "idle"])
+        self.assertEqual(store.sessions.value[0]["state"], "active")
+        self.assertEqual(store.sessions.value[0]["sessionName"], "Runtime title")
+        self.assertEqual(store.sessions.value[1]["sessionName"], "Idle task")
+        self.assertEqual(store.session_counts["codex"], {"active": 1, "idle": 1})
+
+    def test_invalid_codex_desktop_registry_preserves_cached_tasks_and_reports_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "state.sqlite"
+            sqlite3.connect(database).close()
+            store = StateStore()
+            store.sessions.value = [{"id": "cached", "provider": "codex", "state": "idle"}]
+            with (
+                patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CODEX_STATE_DB": str(database)}),
+                patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
+            ):
+                store._refresh_sessions()
+        self.assertEqual(store.sessions.value[0]["id"], "cached")
+        self.assertIn("registry", store.sessions.error)
 
     @patch("codexbar_touchbar.core.threading.Thread")
     def test_uninitialized_cache_always_refreshes(self, thread) -> None:
@@ -225,20 +317,18 @@ class CoreTests(unittest.TestCase):
             ["attention", "active", "idle"],
         )
 
-    def test_claude_session_title_is_enriched_from_desktop_metadata(self) -> None:
+    def test_claude_sessions_are_counts_only_and_not_exposed_as_tasks(self) -> None:
         store = StateStore()
         sessions = [{"id": "claude-id", "provider": "claude", "state": "active", "source": "desktopApp"}]
-        metadata = {"claude-id": {"title": "Visible Claude title", "sessionId": "local-id"}}
         with (
             patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
-            patch.object(store, "_claude_titles", return_value=metadata),
-            patch.object(store, "_app_is_running", return_value=False),
+            patch.object(store, "_codex_desktop_sessions", return_value=[]),
         ):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value[0]["sessionName"], "Visible Claude title")
-        self.assertEqual(store.sessions.value[0]["appSessionId"], "local-id")
+        self.assertEqual(store.sessions.value, [])
+        self.assertEqual(store.session_counts["claude"], {"active": 1, "idle": 0})
 
-    def test_claude_metadata_without_title_preserves_codexbar_name(self) -> None:
+    def test_claude_metadata_does_not_create_touch_bar_tasks(self) -> None:
         store = StateStore()
         sessions = [{
             "id": "claude-id",
@@ -249,93 +339,19 @@ class CoreTests(unittest.TestCase):
         }]
         with (
             patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
-            patch.object(store, "_claude_titles", return_value={
-                "claude-id": {"sessionId": "local-id"}
-            }),
-            patch.object(store, "_app_is_running", return_value=False),
+            patch.object(store, "_codex_desktop_sessions", return_value=[]),
         ):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value[0]["sessionName"], "CodexBar title")
-        self.assertEqual(store.sessions.value[0]["appSessionId"], "local-id")
+        self.assertEqual(store.sessions.value, [])
 
-    def test_invalid_utf8_claude_metadata_is_skipped(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            metadata = (
-                home
-                / "Library/Application Support/Claude/claude-code-sessions"
-                / "account/project/local_session.json"
-            )
-            metadata.parent.mkdir(parents=True)
-            metadata.write_bytes(b"\xff\xfe")
-            store = StateStore()
-            with patch("codexbar_touchbar.core.Path.home", return_value=home):
-                self.assertEqual(store._claude_titles(), {})
-
-    @patch("codexbar_touchbar.core.subprocess.run")
-    @patch("codexbar_touchbar.core.codexbar_path", side_effect=FileNotFoundError)
-    def test_claude_focus_falls_back_when_codexbar_is_missing(self, _path, run) -> None:
-        store = StateStore()
-        store.sessions.value = [{
-            "id": "claude-id", "provider": "claude", "source": "desktopApp"
-        }]
-        store.focus_session("claude-id")
-        run.assert_called_once_with(
-            ["/usr/bin/open", "-a", "Claude"], check=True, timeout=8
-        )
-
-    def test_claude_metadata_cache_does_not_reparse_unchanged_files(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            metadata = (
-                home
-                / "Library/Application Support/Claude/claude-code-sessions"
-                / "account/project/local_session.json"
-            )
-            metadata.parent.mkdir(parents=True)
-            metadata.write_text(json.dumps({
-                "cliSessionId": "cli-id",
-                "sessionId": "local-id",
-                "title": "Visible title",
-            }))
-            store = StateStore()
-            with (
-                patch("codexbar_touchbar.core.Path.home", return_value=home),
-                patch("codexbar_touchbar.core.json.loads", wraps=json.loads) as loads,
-            ):
-                self.assertEqual(store._claude_titles()["cli-id"]["title"], "Visible title")
-                store._claude_title_cache_at = 0
-                self.assertEqual(store._claude_titles()["cli-id"]["title"], "Visible title")
-            self.assertEqual(loads.call_count, 1)
-
-    def test_claude_metadata_cache_removes_deleted_files(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            metadata = (
-                home
-                / "Library/Application Support/Claude/claude-code-sessions"
-                / "account/project/local_session.json"
-            )
-            metadata.parent.mkdir(parents=True)
-            metadata.write_text(json.dumps({"cliSessionId": "cli-id", "title": "Title"}))
-            store = StateStore()
-            with patch("codexbar_touchbar.core.Path.home", return_value=home):
-                self.assertIn("cli-id", store._claude_titles())
-                metadata.unlink()
-                store._claude_title_cache_at = 0
-                self.assertNotIn("cli-id", store._claude_titles())
-            self.assertEqual(store._claude_file_cache, {})
-
-    def test_antigravity_presence_is_explicitly_app_level(self) -> None:
+    def test_antigravity_presence_is_not_exposed_as_a_task(self) -> None:
         store = StateStore()
         with (
             patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
-            patch.object(store, "_claude_titles", return_value={}),
-            patch.object(store, "_app_is_running", return_value=True),
+            patch.object(store, "_codex_desktop_sessions", return_value=[]),
         ):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value[0]["source"], "appPresence")
-        self.assertEqual(store.sessions.value[0]["state"], "available")
+        self.assertEqual(store.sessions.value, [])
 
     def test_compact_snapshot_does_not_expose_transcripts_or_accounts(self) -> None:
         snapshot = {
@@ -349,6 +365,9 @@ class CoreTests(unittest.TestCase):
         self.assertNotIn("private", encoded)
         self.assertNotIn("transcriptPath", encoded)
         self.assertEqual(result["providers"][0]["sessionCounts"], {"active": 1, "idle": 0})
+        self.assertEqual(result["capabilities"], CAPABILITIES)
+        self.assertEqual(result["capabilities"]["codex"]["tasks"]["source"], "codexDesktop")
+        self.assertFalse(result["capabilities"]["claude"]["focusTask"]["supported"])
 
 
 if __name__ == "__main__":

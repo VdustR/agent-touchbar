@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import socket
 import subprocess
 import threading
@@ -41,6 +42,10 @@ class ActionTracker:
     def snapshot(self) -> dict[str, Any] | None:
         with self._lock:
             return dict(self._value) if self._value else None
+
+
+def task_fingerprint(task_id: str) -> str:
+    return hashlib.sha256(task_id.encode()).hexdigest()[:10]
 
 
 class BttUpdateTracker:
@@ -169,13 +174,14 @@ def handler_factory(
                     session_id = payload.get("id")
                     if not isinstance(session_id, str) or len(session_id) > 128:
                         raise ValueError("Invalid session id")
-                    tracker.record("session", "redacted", "received")
+                    target = f"task:{task_fingerprint(session_id)}"
+                    tracker.record("session", target, "received")
                     try:
                         store.focus_session(session_id)
                     except Exception:
-                        tracker.record("session", "redacted", "failed")
+                        tracker.record("session", target, "failed")
                         raise
-                    tracker.record("session", "redacted", "succeeded")
+                    tracker.record("session", target, "succeeded")
                     self.send_json({"ok": True, "id": session_id})
                     return
                 if path == "/api/focus/provider":

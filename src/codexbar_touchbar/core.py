@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import quote
 
 PROVIDERS = ("codex", "claude", "antigravity")
@@ -19,6 +20,38 @@ APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity
 WINDOW_LABELS = {300: "5h", 10080: "7d"}
 ATTENTION_STATES = {"attention", "blocked", "needs_input", "waiting", "approval_required"}
 DISPLAY_STATES = ATTENTION_STATES | {"active", "idle", "available"}
+CAPABILITIES = {
+    "codex": {
+        "tasks": {"supported": True, "source": "codexDesktop"},
+        "focusTask": {"supported": True, "source": "codexDeeplink"},
+        "quota": {"supported": True, "source": "codexbar"},
+    },
+    "claude": {
+        "tasks": {"supported": False, "source": None},
+        "focusTask": {"supported": False, "source": None},
+        "quota": {"supported": True, "source": "codexbar"},
+    },
+    "antigravity": {
+        "tasks": {"supported": False, "source": None},
+        "focusTask": {"supported": False, "source": None},
+        "quota": {"supported": True, "source": "codexbar"},
+    },
+}
+
+
+class ProviderAdapter(Protocol):
+    def sessions(self) -> Any: ...
+    def usage(self, provider: str) -> Any: ...
+
+
+class CodexBarAdapter:
+    """Keep CodexBar behind the capabilities it still serves reliably."""
+
+    def sessions(self) -> Any:
+        return run_codexbar("sessions", "--json-v2", timeout=8)
+
+    def usage(self, provider: str) -> Any:
+        return run_codexbar("usage", "--provider", provider, "--format", "json")
 
 
 def find_executable(name: str, candidates: tuple[str, ...]) -> str:
@@ -86,23 +119,24 @@ class Cache:
 
 
 class StateStore:
-    def __init__(self, usage_ttl: float = 60, sessions_ttl: float = 0.75) -> None:
+    def __init__(
+        self,
+        usage_ttl: float = 60,
+        sessions_ttl: float = 0.75,
+        provider_adapter: ProviderAdapter | None = None,
+    ) -> None:
         self.usage_ttl = usage_ttl
         self.sessions_ttl = sessions_ttl
         self.lock = threading.Lock()
         self.sessions = Cache([])
         self.session_counts: dict[str, dict[str, int]] = {}
         self.usage = Cache([], error={})
-        self._claude_title_cache: dict[str, dict[str, str]] = {}
-        self._claude_title_cache_at = 0.0
-        self._claude_file_cache: dict[
-            Path, tuple[int, int, str, dict[str, str]]
-        ] = {}
+        self.provider_adapter = provider_adapter or CodexBarAdapter()
 
     def _refresh_sessions(self) -> None:
         counts: dict[str, dict[str, int]] = {}
         try:
-            value, error = run_codexbar("sessions", "--json-v2", timeout=8), None
+            value, error = self.provider_adapter.sessions(), None
             if not isinstance(value, list):
                 raise ValueError("CodexBar session payload is not a list")
             for item in value:
@@ -121,28 +155,27 @@ class StateStore:
                 item
                 for item in value
                 if isinstance(item, dict)
-                and item.get("provider") in {"codex", "claude"}
+                and item.get("provider") == "codex"
                 and isinstance(item.get("id"), str)
                 and isinstance(item.get("state"), str)
                 and item.get("state") in DISPLAY_STATES
                 and item.get("source") == "desktopApp"
             ]
-            claude_titles = self._claude_titles()
+            codexbar_codex = {
+                item["id"]: item for item in value if item.get("provider") == "codex"
+            }
+            desktop_codex = self._codex_desktop_sessions()
+            value = []
+            for item in desktop_codex:
+                runtime = codexbar_codex.get(item["id"])
+                if runtime:
+                    item.update(runtime)
+                value.append(item)
+            codex_counts = {"active": 0, "idle": 0}
             for item in value:
-                if item.get("provider") == "claude":
-                    metadata = claude_titles.get(item["id"])
-                    if metadata:
-                        if metadata.get("title"):
-                            item["sessionName"] = metadata["title"]
-                        item["appSessionId"] = metadata.get("sessionId")
-            if self._app_is_running("Antigravity"):
-                value.append({
-                    "id": "app:antigravity",
-                    "provider": "antigravity",
-                    "sessionName": "Antigravity Desktop",
-                    "state": "available",
-                    "source": "appPresence",
-                })
+                if item.get("provider") == "codex" and item.get("state") in codex_counts:
+                    codex_counts[item["state"]] += 1
+            counts["codex"] = codex_counts
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
             value, error = None, str(caught)
         with self.lock:
@@ -153,54 +186,47 @@ class StateStore:
             self.sessions.updated_at = time.monotonic()
             self.sessions.refreshing = False
 
-    def _claude_titles(self) -> dict[str, dict[str, str]]:
-        now = time.monotonic()
-        if self._claude_title_cache_at and now - self._claude_title_cache_at < 5:
-            return self._claude_title_cache
-        root = Path.home() / "Library/Application Support/Claude/claude-code-sessions"
-        result: dict[str, dict[str, str]] = {}
-        current_paths: set[Path] = set()
-        for path in root.glob("*/*/*.json"):
-            current_paths.add(path)
-            try:
-                stat = path.stat()
-                fingerprint = (stat.st_mtime_ns, stat.st_size)
-                cached = self._claude_file_cache.get(path)
-                if cached and cached[:2] == fingerprint:
-                    cli_session_id, metadata = cached[2], cached[3]
-                    result[cli_session_id] = metadata
-                    continue
-                item = json.loads(path.read_text())
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                self._claude_file_cache.pop(path, None)
-                continue
-            if not isinstance(item, dict) or not isinstance(item.get("cliSessionId"), str):
-                self._claude_file_cache.pop(path, None)
-                continue
-            metadata = {
-                key: value
-                for key in ("title", "sessionId")
-                if isinstance((value := item.get(key)), str) and value
-            }
-            cli_session_id = item["cliSessionId"]
-            result[cli_session_id] = metadata
-            self._claude_file_cache[path] = (
-                fingerprint[0], fingerprint[1], cli_session_id, metadata
-            )
-        self._claude_file_cache = {
-            path: item
-            for path, item in self._claude_file_cache.items()
-            if path in current_paths
-        }
-        self._claude_title_cache = result
-        self._claude_title_cache_at = now
-        return result
-
     @staticmethod
-    def _app_is_running(name: str) -> bool:
-        return subprocess.run(
-            ["/usr/bin/pgrep", "-x", name], capture_output=True, timeout=2
-        ).returncode == 0
+    def _codex_desktop_sessions() -> list[dict[str, Any]]:
+        override = os.environ.get("CODEXBAR_TOUCHBAR_CODEX_STATE_DB")
+        path = Path(override).expanduser() if override else Path.home() / ".codex/state_5.sqlite"
+        if not path.is_file():
+            raise ValueError("Codex Desktop task registry is unavailable")
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.2)
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT id, name, cwd, recency_at
+                FROM threads
+                WHERE archived = 0
+                  AND source = 'vscode'
+                  AND preview <> ''
+                  AND name IS NOT NULL
+                  AND name <> ''
+                ORDER BY recency_at_ms DESC
+                """
+            ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise ValueError("Codex Desktop task registry is unavailable") from error
+        finally:
+            if connection is not None:
+                connection.close()
+        return [
+            {
+                "id": row["id"],
+                "provider": "codex",
+                "projectName": Path(row["cwd"]).name,
+                "sessionName": row["name"],
+                "state": "idle",
+                "source": "desktopApp",
+                "lastActivityAt": datetime.fromtimestamp(
+                    row["recency_at"]
+                ).astimezone().isoformat(),
+            }
+            for row in rows
+        ]
 
     def _refresh_usage(self) -> None:
         with self.lock:
@@ -213,7 +239,7 @@ class StateStore:
         errors: dict[str, str] = {}
         for provider in PROVIDERS:
             try:
-                payload = run_codexbar("usage", "--provider", provider, "--format", "json")
+                payload = self.provider_adapter.usage(provider)
                 if not isinstance(payload, list):
                     raise ValueError("CodexBar usage payload is not a list")
                 if any(
@@ -296,6 +322,7 @@ class StateStore:
                 "sessionCounts": self.session_counts,
                 "usage": self.usage.value,
                 "errors": {"sessions": self.sessions.error, "usage": self.usage.error},
+                "capabilities": CAPABILITIES,
             }
 
     def focus_session(self, session_id: str) -> None:
@@ -314,27 +341,7 @@ class StateStore:
                 timeout=3,
             )
             return
-        if provider in APP_NAMES:
-            if provider == "claude":
-                try:
-                    subprocess.run(
-                        [codexbar_path(), "sessions", "focus", session_id],
-                        check=True, capture_output=True, text=True, timeout=8,
-                    )
-                    return
-                except (OSError, subprocess.SubprocessError):
-                    pass
-            subprocess.run(
-                ["/usr/bin/open", "-a", APP_NAMES[provider]], check=True, timeout=8
-            )
-            return
-        subprocess.run(
-            [codexbar_path(), "sessions", "focus", session_id],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
+        raise ValueError("Task does not support exact focus")
 
 
 def compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -352,4 +359,9 @@ def compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         "lastActivityAt", "startedAt", "appSessionId",
     )
     sessions = [{key: item.get(key) for key in session_keys} for item in snapshot["sessions"]]
-    return {"generatedAt": snapshot["generatedAt"], "providers": providers, "sessions": sessions}
+    return {
+        "generatedAt": snapshot["generatedAt"],
+        "providers": providers,
+        "sessions": sessions,
+        "capabilities": snapshot.get("capabilities", CAPABILITIES),
+    }

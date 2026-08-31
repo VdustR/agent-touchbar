@@ -7,10 +7,25 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.cli import doctor, install_service, main, stop_service, uninstall_service
+from codexbar_touchbar.cli import doctor, install_service, launch_agent_loaded, main, stop_service, uninstall_service
 
 
 class CliTests(unittest.TestCase):
+    @patch("codexbar_touchbar.cli.subprocess.run")
+    @patch("codexbar_touchbar.cli.os.getuid", return_value=1234)
+    def test_launch_agent_loaded_queries_the_user_domain(self, _getuid, run) -> None:
+        run.return_value.returncode = 0
+        self.assertTrue(launch_agent_loaded())
+        self.assertEqual(
+            run.call_args.args[0],
+            ["/bin/launchctl", "print", "gui/1234/com.vdustr.codexbar-touchbar"],
+        )
+
+    @patch("codexbar_touchbar.cli.subprocess.run")
+    def test_launch_agent_loaded_rejects_an_unloaded_service(self, run) -> None:
+        run.return_value.returncode = 113
+        self.assertFalse(launch_agent_loaded())
+
     @patch("codexbar_touchbar.cli.subprocess.run")
     def test_stop_service_accepts_missing_launch_agent(self, run) -> None:
         run.return_value.returncode = 3
@@ -142,6 +157,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
             patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("codexbar_touchbar.cli.launch_agent_loaded", return_value=False),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             run_cli.return_value.returncode = 0
@@ -157,6 +173,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
             patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("codexbar_touchbar.cli.launch_agent_loaded", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True
@@ -177,6 +194,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
             patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("codexbar_touchbar.cli.launch_agent_loaded", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True
@@ -197,6 +215,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
             patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=False),
+            patch("codexbar_touchbar.cli.launch_agent_loaded", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True
@@ -220,6 +239,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
             patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("codexbar_touchbar.cli.launch_agent_loaded", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True
