@@ -21,6 +21,7 @@ from .btt import (
     install_widgets,
     run_cli,
     uninstall_widgets,
+    validate_slot_count,
     widget_uuid,
 )
 from .core import StateStore, codexbar_path
@@ -31,6 +32,25 @@ LABEL = "com.vdustr.codexbar-touchbar"
 
 def launch_agent_path() -> Path:
     return Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+
+
+def stop_service() -> None:
+    result = subprocess.run(
+        ["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 and not any(
+        message in result.stderr
+        for message in (
+            "Could not find service",
+            "Could not find specified service",
+            "No such process",
+        )
+    ):
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
 
 
 def install_service() -> None:
@@ -59,8 +79,15 @@ def install_service() -> None:
         },
     }
     target.write_bytes(plistlib.dumps(payload))
-    subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(target)], capture_output=True)
+    stop_service()
     subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(target)], check=True)
+
+
+def start_service() -> None:
+    subprocess.run(
+        ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(launch_agent_path())],
+        check=True,
+    )
 
 
 def uninstall_service() -> None:
@@ -154,15 +181,30 @@ def main() -> None:
     if args.command == "serve":
         serve("127.0.0.1", 4317)
     elif args.command == "install":
-        icons = extract_icons()
-        for result in install_widgets(args.session_slots):
-            print(result)
-        install_service()
+        # Prevent the previous service process from racing trigger replacement
+        # with stale update semantics during an in-place upgrade.
+        restore_service = launch_agent_path().is_file()
+        stop_service()
+        try:
+            icons = extract_icons()
+            for result in install_widgets(args.session_slots):
+                print(result)
+            install_service()
+        except Exception as error:
+            if restore_service:
+                try:
+                    start_service()
+                except (OSError, subprocess.SubprocessError) as restore_error:
+                    error.add_note(
+                        f"Failed to restore the previous service: {type(restore_error).__name__}"
+                    )
+            raise
         print(json.dumps({"icons": icons}))
     elif args.command == "uninstall":
+        validate_slot_count(args.session_slots)
+        uninstall_service()
         for name in uninstall_widgets(args.session_slots):
             print(f"removed: {name}")
-        uninstall_service()
     elif args.command == "doctor":
         raise SystemExit(doctor())
 

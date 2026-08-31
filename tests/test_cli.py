@@ -1,18 +1,35 @@
 from __future__ import annotations
 
 import plistlib
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.cli import doctor, install_service, main, uninstall_service
+from codexbar_touchbar.cli import doctor, install_service, main, stop_service, uninstall_service
 
 
 class CliTests(unittest.TestCase):
     @patch("codexbar_touchbar.cli.subprocess.run")
+    def test_stop_service_accepts_missing_launch_agent(self, run) -> None:
+        run.return_value.returncode = 3
+        run.return_value.stderr = 'Could not find service "com.vdustr.codexbar-touchbar"'
+        stop_service()
+
+    @patch("codexbar_touchbar.cli.subprocess.run")
+    def test_stop_service_rejects_unexpected_launchctl_failure(self, run) -> None:
+        run.return_value.returncode = 1
+        run.return_value.stdout = ""
+        run.return_value.stderr = "Not privileged"
+        run.return_value.args = ["launchctl", "bootout"]
+        with self.assertRaises(subprocess.CalledProcessError):
+            stop_service()
+
+    @patch("codexbar_touchbar.cli.subprocess.run")
     @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
     def test_launch_agent_pins_resolved_codexbar(self, _codexbar, _run) -> None:
+        _run.return_value.returncode = 0
         with TemporaryDirectory() as temporary:
             plist = Path(temporary) / "agent.plist"
             with (
@@ -43,6 +60,7 @@ class CliTests(unittest.TestCase):
     @patch("codexbar_touchbar.cli.subprocess.run")
     @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
     def test_module_install_preserves_python_interpreter(self, _codexbar, _run) -> None:
+        _run.return_value.returncode = 0
         with TemporaryDirectory() as temporary:
             plist = Path(temporary) / "agent.plist"
             with (
@@ -59,9 +77,10 @@ class CliTests(unittest.TestCase):
                 ["/custom/bin/python", "-m", "codexbar_touchbar", "serve"],
             )
 
-    def test_install_replaces_widgets_before_starting_service(self) -> None:
+    def test_install_stops_service_before_replacing_widgets(self) -> None:
         events = []
         with (
+            patch("codexbar_touchbar.cli.stop_service", side_effect=lambda: events.append("stop")),
             patch("codexbar_touchbar.cli.install_service", side_effect=lambda: events.append("service")),
             patch("codexbar_touchbar.cli.install_widgets", side_effect=lambda _: events.append("widgets") or []),
             patch("codexbar_touchbar.cli.extract_icons", return_value={}),
@@ -70,7 +89,49 @@ class CliTests(unittest.TestCase):
             parser.return_value.parse_args.return_value.command = "install"
             parser.return_value.parse_args.return_value.session_slots = 4
             main()
-        self.assertEqual(events, ["widgets", "service"])
+        self.assertEqual(events, ["stop", "widgets", "service"])
+
+    def test_failed_update_restores_previous_service(self) -> None:
+        events = []
+        with (
+            patch("codexbar_touchbar.cli.launch_agent_path") as plist,
+            patch("codexbar_touchbar.cli.stop_service", side_effect=lambda: events.append("stop")),
+            patch("codexbar_touchbar.cli.start_service", side_effect=lambda: events.append("restore")),
+            patch("codexbar_touchbar.cli.install_widgets", side_effect=OSError("BTT failed")),
+            patch("codexbar_touchbar.cli.extract_icons", return_value={}),
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            plist.return_value.is_file.return_value = True
+            parser.return_value.parse_args.return_value.command = "install"
+            parser.return_value.parse_args.return_value.session_slots = 4
+            with self.assertRaises(OSError):
+                main()
+        self.assertEqual(events, ["stop", "restore"])
+
+    def test_uninstall_stops_service_before_removing_widgets(self) -> None:
+        events = []
+        with (
+            patch("codexbar_touchbar.cli.uninstall_service", side_effect=lambda: events.append("service")),
+            patch("codexbar_touchbar.cli.uninstall_widgets", side_effect=lambda _: events.append("widgets") or []),
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            parser.return_value.parse_args.return_value.command = "uninstall"
+            parser.return_value.parse_args.return_value.session_slots = 4
+            main()
+        self.assertEqual(events, ["service", "widgets"])
+
+    def test_invalid_uninstall_slot_count_does_not_stop_service(self) -> None:
+        with (
+            patch("codexbar_touchbar.cli.uninstall_service") as uninstall_service,
+            patch("codexbar_touchbar.cli.uninstall_widgets") as uninstall_widgets,
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            parser.return_value.parse_args.return_value.command = "uninstall"
+            parser.return_value.parse_args.return_value.session_slots = 0
+            with self.assertRaises(ValueError):
+                main()
+        uninstall_service.assert_not_called()
+        uninstall_widgets.assert_not_called()
 
     def test_doctor_requires_launch_agent(self) -> None:
         snapshot = {"sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}
