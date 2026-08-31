@@ -157,6 +157,19 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertEqual(commands, ["get_trigger", "delete_trigger", "add_new_trigger"])
         persist.assert_called_once_with(0, "new")
 
+    @patch("codexbar_touchbar.btt.persist_session_action")
+    @patch("codexbar_touchbar.btt.run_cli")
+    def test_failed_session_lookup_retains_previous_tap_target(self, run_cli, persist) -> None:
+        run_cli.return_value = subprocess.CompletedProcess(
+            ["bttcli", "get_trigger"], 1, "", "socket unavailable"
+        )
+        snapshot = {"usage": [], "sessions": [
+            {"id": "new", "provider": "codex", "state": "active", "source": "desktopApp"}
+        ]}
+        with self.assertRaises(subprocess.CalledProcessError):
+            update_buttons(snapshot, 1, {widget_uuid("Agent session 1"): {"old": True}})
+        persist.assert_not_called()
+
     def test_cli_sessions_are_not_rendered_as_desktop_buttons(self) -> None:
         snapshot = {
             "usage": [],

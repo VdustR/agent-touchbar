@@ -194,16 +194,23 @@ def update_buttons(
             if trigger_id in session_ids
             else None
         )
-        if session_index is not None:
+        changed = previous is None or previous.get(trigger_id) != payload
+        if session_index is not None and not changed:
+            # The visible presentation is unchanged, so swapping only the
+            # opaque target keeps the label and action semantically aligned.
             persist_session_action(session_index, sessions[session_index]["id"])
-        if previous is None or previous.get(trigger_id) != payload:
+        if changed:
             if session_index is not None:
                 existing = trigger_payload(trigger_id)
                 if existing not in {"", "null", "{}", "[]"}:
                     # Partial update_trigger payloads are interpreted as generic
                     # mouse triggers by BTT 6.x. Replace the full Touch Bar
-                    # definition atomically whenever session identity changes.
+                    # definition whenever the rendered presentation changes.
                     run_cli("delete_trigger", f"uuid={trigger_id}")
+                # Do not swap the target while an old presentation can still
+                # be tapped. After deletion succeeds, a failed add leaves no
+                # misleading trigger and the update loop retries the full add.
+                persist_session_action(session_index, sessions[session_index]["id"])
                 definition = session_definition(session_index)
                 definition.update(payload)
                 definition["BTTTriggerConfig"] = {
