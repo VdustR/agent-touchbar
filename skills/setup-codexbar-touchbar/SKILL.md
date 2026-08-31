@@ -17,7 +17,7 @@ third-party applications without explicit user authorization.
    `~/Library/Application Support/CodexBarTouchBar`, installs or updates the
    LaunchAgent, extracts icons from installed desktop applications, and
    upserts the BetterTouchTool widgets.
-3. Run `~/.local/bin/codexbar-touchbar doctor`.
+3. Run `${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}/codexbar-touchbar doctor`.
 4. Verify `http://127.0.0.1:4317/healthz` and inspect one
    `http://127.0.0.1:4317/api/btt` response. Do not print transcripts,
    credentials, cookies, or account identifiers.

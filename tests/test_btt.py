@@ -183,6 +183,28 @@ class BetterTouchToolTests(unittest.TestCase):
         with patch("codexbar_touchbar.btt.slot_state_path", return_value=Path("/missing")):
             self.assertEqual(previous_slot_count(), 12)
 
+    def test_non_object_slot_state_defaults_to_managing_all_slots(self) -> None:
+        with TemporaryDirectory() as temporary:
+            state = Path(temporary) / "session-slots.json"
+            state.write_text("[]")
+            with patch("codexbar_touchbar.btt.slot_state_path", return_value=state):
+                self.assertEqual(previous_slot_count(), 12)
+
+    def test_install_fails_when_excess_slot_cannot_be_deleted(self) -> None:
+        with TemporaryDirectory() as temporary:
+            with (
+                patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
+                patch("codexbar_touchbar.btt.run_cli") as run_cli,
+            ):
+                def response(*args, **kwargs):
+                    if args == ("delete_trigger", f"uuid={widget_uuid('Agent session 5')}"):
+                        raise subprocess.CalledProcessError(1, ["bttcli", *args])
+                    return subprocess.CompletedProcess([], 0, "{}", "")
+
+                run_cli.side_effect = response
+                with self.assertRaises(subprocess.CalledProcessError):
+                    install_widgets(4)
+
 
 if __name__ == "__main__":
     unittest.main()

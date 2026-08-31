@@ -57,6 +57,8 @@ def slot_action_path(index: int) -> Path:
 def previous_slot_count(default: int = 12) -> int:
     try:
         payload = json.loads(slot_state_path().read_text())
+        if not isinstance(payload, dict):
+            return default
         value = payload.get("sessionSlots")
         return value if isinstance(value, int) and 1 <= value <= 12 else default
     except (OSError, json.JSONDecodeError):
@@ -271,7 +273,7 @@ def install_widgets(session_slots: int = 4) -> list[str]:
     run_cli("delete_trigger", "uuid=E4F85058-56B7-4DBD-9064-3C26F11B8C52", check=False)
     for index in range(session_slots, 12):
         name = f"Agent session {index + 1}"
-        run_cli("delete_trigger", f"uuid={widget_uuid(name)}", check=False)
+        run_cli("delete_trigger", f"uuid={widget_uuid(name)}")
         results.append(f"delete_trigger: {name}")
     slot_state_path().parent.mkdir(parents=True, exist_ok=True)
     slot_state_path().write_text(json.dumps({"sessionSlots": session_slots}) + "\n")
