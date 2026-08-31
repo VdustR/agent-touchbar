@@ -19,8 +19,10 @@ only a seven-day Codex window does not receive a synthetic five-hour window.
 Session state is limited to values reported by CodexBar; approval or error
 states are not inferred from inactivity.
 
-Session labels also follow CodexBar metadata. Codex desktop sessions normally
-include the conversation title. Claude may only expose a project name. CLI
+Session discovery, state, focus, and transcript paths follow CodexBar metadata.
+Codex desktop sessions normally include the conversation title. For Claude,
+the bridge reads only matching `custom-title` and `ai-title` metadata records
+from the discovered transcript; it does not read or expose message content. CLI
 sessions are excluded because their short terminal titles are not useful Touch
 Bar labels and cannot navigate to a desktop conversation.
 Project-name fallbacks are prefixed with `⌁` so they are not presented as

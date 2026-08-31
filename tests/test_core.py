@@ -1,12 +1,29 @@
 from __future__ import annotations
 
 import unittest
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from codexbar_touchbar.core import StateStore, compact_snapshot, quota_windows, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
+    def test_claude_title_enrichment_reads_only_matching_title_metadata(self) -> None:
+        with TemporaryDirectory() as temporary:
+            transcript = Path(temporary) / "session.jsonl"
+            records = [
+                {"type": "user", "sessionId": "wanted", "message": {"content": "private"}},
+                {"type": "ai-title", "sessionId": "other", "aiTitle": "Wrong"},
+                {"type": "ai-title", "sessionId": "wanted", "aiTitle": "Generated"},
+                {"type": "custom-title", "sessionId": "wanted", "customTitle": "Chosen"},
+            ]
+            transcript.write_text("\n".join(json.dumps(item) for item in records))
+            store = StateStore()
+            session = {"id": "wanted", "provider": "claude", "transcriptPath": str(transcript)}
+            self.assertEqual(store._claude_title(session), "Chosen")
+
     def test_usage_refresh_preserves_failed_provider_cache(self) -> None:
         store = StateStore()
         store.usage.value = [
