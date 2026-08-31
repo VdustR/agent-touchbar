@@ -120,6 +120,19 @@ class CliTests(unittest.TestCase):
             main()
         self.assertEqual(events, ["service", "widgets"])
 
+    def test_invalid_uninstall_slot_count_does_not_stop_service(self) -> None:
+        with (
+            patch("codexbar_touchbar.cli.uninstall_service") as uninstall_service,
+            patch("codexbar_touchbar.cli.uninstall_widgets") as uninstall_widgets,
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            parser.return_value.parse_args.return_value.command = "uninstall"
+            parser.return_value.parse_args.return_value.session_slots = 0
+            with self.assertRaises(ValueError):
+                main()
+        uninstall_service.assert_not_called()
+        uninstall_widgets.assert_not_called()
+
     def test_doctor_requires_launch_agent(self) -> None:
         snapshot = {"sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}
         with (

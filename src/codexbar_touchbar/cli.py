@@ -21,6 +21,7 @@ from .btt import (
     install_widgets,
     run_cli,
     uninstall_widgets,
+    validate_slot_count,
     widget_uuid,
 )
 from .core import StateStore, codexbar_path
@@ -200,6 +201,7 @@ def main() -> None:
             raise
         print(json.dumps({"icons": icons}))
     elif args.command == "uninstall":
+        validate_slot_count(args.session_slots)
         uninstall_service()
         for name in uninstall_widgets(args.session_slots):
             print(f"removed: {name}")

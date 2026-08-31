@@ -132,7 +132,37 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
             "BTTTouchBarButtonName": " · ".join(parts) or "—",
             "BTTTriggerConfig": {"BTTTouchBarButtonColor": color},
         }))
-    sessions = [
+    sessions = display_sessions(snapshot, session_slots)
+    for index, item in enumerate(sessions):
+        payload: dict = {"BTTEnabled": True}
+        active = item.get("state") == "active"
+        attention = item.get("state") in ATTENTION_STATES
+        session_name = item.get("sessionName")
+        project_name = item.get("projectName")
+        if isinstance(session_name, str) and session_name:
+            name = session_name
+        elif isinstance(project_name, str) and project_name:
+            name = f"⌁ {project_name}"
+        else:
+            name = "session"
+        payload.update({
+            "BTTTouchBarButtonName": f"{'!' if attention else ('●' if active else '○')} {name[:16]}",
+            "BTTOrder": -session_slots + index if attention else 20 + index,
+            "BTTTriggerConfig": {"BTTTouchBarButtonColor": "112, 35, 42, 255" if attention else ("27, 75, 61, 255" if active else "27, 32, 40, 255")},
+        })
+        encoded_icon = icon_data(item.get("provider", ""))
+        if encoded_icon:
+            payload["BTTIconData"] = encoded_icon
+            payload["BTTTriggerConfig"].update({
+                "BTTTouchBarItemIconWidth": 18,
+                "BTTTouchBarItemIconHeight": 18,
+            })
+        updates.append((widget_uuid(f"Agent session {index + 1}"), payload))
+    return updates
+
+
+def display_sessions(snapshot: dict, session_slots: int) -> list[dict]:
+    return [
         item
         for item in snapshot.get("sessions", [])
         if item.get("provider") in PROVIDERS
@@ -141,41 +171,14 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
             item.get("source") == "desktopApp"
             or (item.get("provider") == "antigravity" and item.get("source") == "appPresence")
         )
-    ]
-    for index, item in enumerate(sessions[:session_slots]):
-        payload: dict = {"BTTEnabled": True}
-        if item:
-            active = item.get("state") == "active"
-            attention = item.get("state") in ATTENTION_STATES
-            session_name = item.get("sessionName")
-            project_name = item.get("projectName")
-            if isinstance(session_name, str) and session_name:
-                name = session_name
-            elif isinstance(project_name, str) and project_name:
-                name = f"⌁ {project_name}"
-            else:
-                name = "session"
-            payload.update({
-                "BTTTouchBarButtonName": f"{'!' if attention else ('●' if active else '○')} {name[:16]}",
-                "BTTTerminalCommand": session_payload_action(item["id"]),
-                "BTTOrder": -session_slots + index if attention else 20 + index,
-                "BTTTriggerConfig": {"BTTTouchBarButtonColor": "112, 35, 42, 255" if attention else ("27, 75, 61, 255" if active else "27, 32, 40, 255")},
-            })
-            encoded_icon = icon_data(item.get("provider", ""))
-            if encoded_icon:
-                payload["BTTIconData"] = encoded_icon
-                payload["BTTTriggerConfig"].update({
-                    "BTTTouchBarItemIconWidth": 18,
-                    "BTTTouchBarItemIconHeight": 18,
-                })
-        updates.append((widget_uuid(f"Agent session {index + 1}"), payload))
-    return updates
+    ][:session_slots]
 
 
 def update_buttons(
     snapshot: dict, session_slots: int = 4, previous: dict[str, dict] | None = None
 ) -> dict[str, dict]:
     current = dict(button_updates(snapshot, session_slots))
+    sessions = display_sessions(snapshot, session_slots)
     session_ids = {widget_uuid(f"Agent session {index + 1}") for index in range(session_slots)}
     for index in range(session_slots):
         trigger_id = widget_uuid(f"Agent session {index + 1}")
@@ -183,20 +186,27 @@ def update_buttons(
             existing = trigger_payload(trigger_id)
             if existing not in {"", "null", "{}", "[]"}:
                 run_cli("delete_trigger", f"uuid={trigger_id}")
+            slot_action_path(index).unlink(missing_ok=True)
     for trigger_id, payload in current.items():
+        session_index = (
+            next(i for i in range(session_slots) if widget_uuid(f"Agent session {i + 1}") == trigger_id)
+            if trigger_id in session_ids
+            else None
+        )
+        if session_index is not None:
+            persist_session_action(session_index, sessions[session_index]["id"])
         if previous is None or previous.get(trigger_id) != payload:
-            if trigger_id in session_ids:
+            if session_index is not None:
                 existing = trigger_payload(trigger_id)
                 if existing not in {"", "null", "{}", "[]"}:
                     # Partial update_trigger payloads are interpreted as generic
                     # mouse triggers by BTT 6.x. Replace the full Touch Bar
                     # definition atomically whenever session identity changes.
                     run_cli("delete_trigger", f"uuid={trigger_id}")
-                index = next(i for i in range(session_slots) if widget_uuid(f"Agent session {i + 1}") == trigger_id)
-                definition = session_definition(index)
+                definition = session_definition(session_index)
                 definition.update(payload)
                 definition["BTTTriggerConfig"] = {
-                    **session_definition(index)["BTTTriggerConfig"],
+                    **session_definition(session_index)["BTTTriggerConfig"],
                     **payload.get("BTTTriggerConfig", {}),
                 }
                 run_cli("add_new_trigger", f"json={json.dumps(definition, ensure_ascii=False, separators=(',', ':'))}")
@@ -222,6 +232,14 @@ def session_definition(index: int) -> dict:
     return widget(
         f"Agent session {index + 1}", session_script(index), session_action(index), 132, 20 + index, 2.5
     )
+
+
+def persist_session_action(index: int, session_id: str) -> None:
+    action_path = slot_action_path(index)
+    action_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = action_path.with_suffix(action_path.suffix + ".tmp")
+    temporary.write_text(json.dumps({"id": session_id}, separators=(",", ":")))
+    temporary.replace(action_path)
 
 
 def quota_script(provider: str) -> str:
@@ -278,11 +296,6 @@ else:
 def session_action(index: int) -> str:
     action_path = shlex.quote(str(slot_action_path(index)))
     return rf'''if [ -s {action_path} ]; then /usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data-binary @{action_path} {BASE_URL}/api/focus/session >/dev/null; fi'''
-
-
-def session_payload_action(session_id: str) -> str:
-    payload = json.dumps({"id": session_id}, separators=(",", ":"))
-    return f"/usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data {shlex.quote(payload)} {BASE_URL}/api/focus/session >/dev/null"
 
 
 def definitions(session_slots: int = 4) -> list[dict]:
