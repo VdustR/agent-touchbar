@@ -123,7 +123,9 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
         payload: dict = {"BTTEnabled": bool(item)}
         if item:
             active = item.get("state") == "active"
-            name = item.get("sessionName") or item.get("projectName") or "session"
+            session_name = item.get("sessionName")
+            project_name = item.get("projectName")
+            name = session_name or (f"⌁ {project_name}" if project_name else "session")
             payload.update({
                 "BTTTouchBarButtonName": f"{'●' if active else '○'} {name[:16]}",
                 "BTTTerminalCommand": session_payload_action(item["id"]),

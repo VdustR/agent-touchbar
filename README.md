@@ -23,6 +23,8 @@ Session labels also follow CodexBar metadata. Codex desktop sessions normally
 include the conversation title. Claude may only expose a project name. CLI
 sessions are excluded because their short terminal titles are not useful Touch
 Bar labels and cannot navigate to a desktop conversation.
+Project-name fallbacks are prefixed with `⌁` so they are not presented as
+conversation titles.
 
 Tapping a usage item opens or focuses its desktop application. Tapping a
 session calls `codexbar sessions focus <id>`, which activates the owning

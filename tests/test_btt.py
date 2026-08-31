@@ -59,7 +59,7 @@ class BetterTouchToolTests(unittest.TestCase):
         updates = dict(button_updates(snapshot, 1))
         self.assertEqual(
             updates[widget_uuid("Agent session 1")]["BTTTouchBarButtonName"],
-            "○ Project",
+            "○ ⌁ Project",
         )
 
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
