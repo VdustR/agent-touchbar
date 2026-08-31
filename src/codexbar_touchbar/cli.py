@@ -12,7 +12,15 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .btt import data_dir, extract_icons, install_widgets, uninstall_widgets
+from .btt import (
+    bttcli_path,
+    data_dir,
+    extract_icons,
+    install_widgets,
+    run_cli,
+    uninstall_widgets,
+    widget_uuid,
+)
 from .core import StateStore, codexbar_path
 from .server import serve
 
@@ -28,12 +36,12 @@ def install_service() -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     log_dir = data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    executable = shutil.which("codexbar-touchbar")
-    program_arguments = (
-        [str(Path(executable).resolve()), "serve"]
-        if executable
-        else [sys.executable, "-m", "codexbar_touchbar", "serve"]
-    )
+    invoked = Path(sys.argv[0])
+    if invoked.name == "codexbar-touchbar":
+        executable = invoked if invoked.is_absolute() else Path(shutil.which(sys.argv[0]) or invoked)
+        program_arguments = [str(executable.resolve()), "serve"]
+    else:
+        program_arguments = [sys.executable, "-m", "codexbar_touchbar", "serve"]
     payload = {
         "Label": LABEL,
         "ProgramArguments": program_arguments,
@@ -65,7 +73,15 @@ def doctor() -> int:
         checks["codexbar"] = codexbar_path()
     except FileNotFoundError as error:
         checks["codexbar"] = str(error)
-    checks["betterTouchTool"] = Path("/Applications/BetterTouchTool.app").is_dir()
+    try:
+        lookup = run_cli("get_trigger", f"uuid={widget_uuid('Codex usage')}", check=False)
+        checks["betterTouchTool"] = (
+            bttcli_path()
+            and lookup.returncode == 0
+            and lookup.stdout.strip() not in {"", "null", "{}", "[]"}
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        checks["betterTouchTool"] = False
     checks["launchAgent"] = launch_agent_path().is_file()
     store = StateStore(usage_ttl=0, sessions_ttl=0)
     store.wait_for_initial_data()

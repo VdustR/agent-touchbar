@@ -37,10 +37,12 @@ class ServerTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def request(self, method: str, path: str, payload: object | None = None, content_type: str = "application/json"):
+    def request(self, method: str, path: str, payload: object | None = None, content_type: str = "application/json", host: str | None = None):
         connection = HTTPConnection("127.0.0.1", self.port, timeout=2)
         body = json.dumps(payload).encode() if payload is not None else None
         headers = {"Content-Type": content_type} if body else {}
+        if host:
+            headers["Host"] = host
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
         decoded = json.loads(response.read())
@@ -57,6 +59,11 @@ class ServerTests(unittest.TestCase):
         status, body = self.request("POST", "/api/focus/session", {"id": "unknown"})
         self.assertEqual(status, 400)
         self.assertIn("expired", body["error"])
+
+    def test_rejects_non_loopback_host_header(self) -> None:
+        status, body = self.request("GET", "/api/state", host="attacker.example")
+        self.assertEqual(status, 400)
+        self.assertIn("Host", body["error"])
 
     def test_post_requires_json(self) -> None:
         status, body = self.request("POST", "/api/focus/session", {"id": "valid"}, "text/plain")

@@ -11,14 +11,14 @@ from codexbar_touchbar.cli import doctor, install_service, main
 
 class CliTests(unittest.TestCase):
     @patch("codexbar_touchbar.cli.subprocess.run")
-    @patch("codexbar_touchbar.cli.shutil.which", return_value="/tmp/bin/codexbar-touchbar")
     @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
-    def test_launch_agent_pins_resolved_codexbar(self, _codexbar, _which, _run) -> None:
+    def test_launch_agent_pins_resolved_codexbar(self, _codexbar, _run) -> None:
         with TemporaryDirectory() as temporary:
             plist = Path(temporary) / "agent.plist"
             with (
                 patch("codexbar_touchbar.cli.launch_agent_path", return_value=plist),
                 patch("codexbar_touchbar.cli.data_dir", return_value=Path(temporary)),
+                patch("codexbar_touchbar.cli.sys.argv", ["/custom/current/codexbar-touchbar"]),
             ):
                 install_service()
             payload = plistlib.loads(plist.read_bytes())
@@ -30,17 +30,21 @@ class CliTests(unittest.TestCase):
                 payload["EnvironmentVariables"]["CODEXBAR_TOUCHBAR_DATA_DIR"],
                 temporary,
             )
+            self.assertEqual(
+                payload["ProgramArguments"],
+                ["/custom/current/codexbar-touchbar", "serve"],
+            )
 
     @patch("codexbar_touchbar.cli.subprocess.run")
-    @patch("codexbar_touchbar.cli.shutil.which", return_value=None)
     @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
-    def test_module_install_preserves_python_interpreter(self, _codexbar, _which, _run) -> None:
+    def test_module_install_preserves_python_interpreter(self, _codexbar, _run) -> None:
         with TemporaryDirectory() as temporary:
             plist = Path(temporary) / "agent.plist"
             with (
                 patch("codexbar_touchbar.cli.launch_agent_path", return_value=plist),
                 patch("codexbar_touchbar.cli.data_dir", return_value=Path(temporary)),
                 patch("codexbar_touchbar.cli.sys.executable", "/custom/bin/python"),
+                patch("codexbar_touchbar.cli.sys.argv", ["/package/codexbar_touchbar/__main__.py"]),
             ):
                 install_service()
             payload = plistlib.loads(plist.read_bytes())
@@ -68,8 +72,27 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.codexbar_path", return_value="/bin/codexbar"),
             patch("codexbar_touchbar.cli.launch_agent_path", return_value=Path("/missing")),
             patch("codexbar_touchbar.cli.Path.is_dir", return_value=True),
+            patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
+            patch("codexbar_touchbar.cli.run_cli") as run_cli,
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
+            run_cli.return_value.returncode = 0
+            run_cli.return_value.stdout = '{"BTTUUID":"installed"}'
+            store_type.return_value.snapshot.return_value = snapshot
+            self.assertEqual(doctor(), 1)
+
+    def test_doctor_requires_btt_cli_connectivity_and_managed_trigger(self) -> None:
+        snapshot = {"sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}
+        with (
+            patch("codexbar_touchbar.cli.codexbar_path", return_value="/bin/codexbar"),
+            patch("codexbar_touchbar.cli.launch_agent_path") as plist,
+            patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
+            patch("codexbar_touchbar.cli.run_cli") as run_cli,
+            patch("codexbar_touchbar.cli.StateStore") as store_type,
+        ):
+            plist.return_value.is_file.return_value = True
+            run_cli.return_value.returncode = 1
+            run_cli.return_value.stdout = ""
             store_type.return_value.snapshot.return_value = snapshot
             self.assertEqual(doctor(), 1)
 

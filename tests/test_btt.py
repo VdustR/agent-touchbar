@@ -152,6 +152,14 @@ class BetterTouchToolTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 uninstall_widgets(1)
 
+    def test_uninstall_checks_all_twelve_session_slots(self) -> None:
+        with patch("codexbar_touchbar.btt.run_cli") as run_cli:
+            run_cli.return_value.returncode = 0
+            run_cli.return_value.stdout = "{}"
+            uninstall_widgets(1)
+        looked_up = {call.args[1] for call in run_cli.call_args_list if call.args[0] == "get_trigger"}
+        self.assertIn(f"uuid={widget_uuid('Agent session 12')}", looked_up)
+
 
 if __name__ == "__main__":
     unittest.main()

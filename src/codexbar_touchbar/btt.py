@@ -273,7 +273,8 @@ def install_widgets(session_slots: int = 4) -> list[str]:
 
 
 def uninstall_widgets(session_slots: int = 4) -> list[str]:
-    session_slots = max(validate_slot_count(session_slots), previous_slot_count())
+    validate_slot_count(session_slots)
+    session_slots = 12
     names = [f"{provider.title()} usage" for provider in PROVIDERS]
     names.extend(f"Agent session {index + 1}" for index in range(session_slots))
     removed = []

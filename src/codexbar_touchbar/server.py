@@ -76,7 +76,23 @@ def handler_factory(
                 raise ValueError("Invalid request body")
             return value
 
+        def allowed_host(self) -> bool:
+            port = int(getattr(self.server, "server_port", 4317))
+            return self.headers.get("Host", "") in {
+                f"127.0.0.1:{port}",
+                f"localhost:{port}",
+                f"[::1]:{port}",
+            }
+
+        def reject_untrusted_host(self) -> bool:
+            if self.allowed_host():
+                return False
+            self.send_json({"error": "Untrusted Host header"}, HTTPStatus.BAD_REQUEST)
+            return True
+
         def do_GET(self) -> None:
+            if self.reject_untrusted_host():
+                return
             path = urlparse(self.path).path
             if path == "/api/state":
                 self.send_json(store.snapshot())
@@ -97,6 +113,8 @@ def handler_factory(
                 self.send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
+            if self.reject_untrusted_host():
+                return
             try:
                 payload = self.read_payload()
                 path = urlparse(self.path).path
