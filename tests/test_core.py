@@ -56,6 +56,15 @@ class CoreTests(unittest.TestCase):
             store._refresh_sessions()
         self.assertEqual(store.sessions.value, [{"id": "valid", "provider": "codex", "state": "active"}])
 
+    def test_session_refresh_rejects_non_list_payload(self) -> None:
+        store = StateStore()
+        store.sessions.value = [{"id": "cached", "provider": "codex"}]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value={}):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value, [{"id": "cached", "provider": "codex"}])
+        self.assertIn("not a list", store.sessions.error)
+        self.assertFalse(store.sessions.refreshing)
+
     def test_session_refresh_counts_supported_states_for_each_provider(self) -> None:
         store = StateStore()
         sessions = [

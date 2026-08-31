@@ -144,7 +144,7 @@ def handler_factory(
                     return
                 if path == "/api/focus/provider":
                     provider = payload.get("provider")
-                    if provider not in APP_NAMES:
+                    if not isinstance(provider, str) or provider not in APP_NAMES:
                         raise ValueError("Unknown provider")
                     tracker.record("provider", provider, "received")
                     try:
@@ -173,6 +173,7 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
     state.wait_for_initial_data()
     def update_loop() -> None:
         previous: dict[str, dict] = {}
+        retry_delay = 0.25
         while True:
             try:
                 state.refresh()
@@ -180,9 +181,10 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
                 previous = update_buttons(
                     state.snapshot(), previous_slot_count(), previous
                 )
+                retry_delay = 0.25
             except (OSError, subprocess.SubprocessError, ValueError):
-                pass
-            time.sleep(0.25)
+                retry_delay = min(max(retry_delay * 2, 1.0), 8.0)
+            time.sleep(retry_delay)
 
     threading.Thread(target=update_loop, daemon=True, name="btt-buttons").start()
     server_type = ThreadingHTTPServer

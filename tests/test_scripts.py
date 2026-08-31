@@ -17,6 +17,12 @@ class ScriptTests(unittest.TestCase):
             script,
         )
 
+    def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
+        self.assertIn('rm -rf "$INSTALL_ROOT/venv"', script)
+        self.assertIn('DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
+        self.assertIn('remain at: $DATA_DIR', script)
+
     def test_fallback_uninstall_reports_uuid_generator_failure(self) -> None:
         repository = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:

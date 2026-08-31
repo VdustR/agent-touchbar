@@ -91,28 +91,28 @@ class StateStore:
         counts: dict[str, dict[str, int]] = {}
         try:
             value, error = run_codexbar("sessions", "--json-v2", timeout=8), None
-            if isinstance(value, list):
-                for item in value:
-                    if not isinstance(item, dict):
-                        continue
-                    provider = item.get("provider")
-                    state = item.get("state")
-                    if (
-                        isinstance(provider, str)
-                        and isinstance(state, str)
-                        and provider in PROVIDERS
-                        and state in {"active", "idle"}
-                    ):
-                        counts.setdefault(provider, {"active": 0, "idle": 0})[state] += 1
-                codex_sessions = [
-                    item
-                    for item in value
-                    if isinstance(item, dict)
-                    and item.get("provider") == "codex"
-                    and isinstance(item.get("id"), str)
-                ]
-                value = codex_sessions
-        except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
+            if not isinstance(value, list):
+                raise ValueError("CodexBar session payload is not a list")
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                provider = item.get("provider")
+                state = item.get("state")
+                if (
+                    isinstance(provider, str)
+                    and isinstance(state, str)
+                    and provider in PROVIDERS
+                    and state in {"active", "idle"}
+                ):
+                    counts.setdefault(provider, {"active": 0, "idle": 0})[state] += 1
+            value = [
+                item
+                for item in value
+                if isinstance(item, dict)
+                and item.get("provider") == "codex"
+                and isinstance(item.get("id"), str)
+            ]
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
             value, error = None, str(caught)
         with self.lock:
             if value is not None:

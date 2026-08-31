@@ -2,6 +2,7 @@
 set -euo pipefail
 
 INSTALL_ROOT="${CODEXBAR_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Support/CodexBarTouchBar}"
+DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"
 BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
 COMMAND="$BIN_DIR/codexbar-touchbar"
 
@@ -60,6 +61,7 @@ PY
   fi
 fi
 rm -f "$COMMAND"
+rm -rf "$INSTALL_ROOT/venv"
 
 echo "Removed the service, command, and BetterTouchTool widgets."
-echo "Runtime logs and extracted icons remain at: $INSTALL_ROOT"
+echo "Runtime logs and extracted icons remain at: $DATA_DIR"

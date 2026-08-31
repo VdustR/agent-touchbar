@@ -84,6 +84,11 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("Content-Type", body["error"])
 
+    def test_provider_focus_rejects_non_string_provider(self) -> None:
+        status, body = self.request("POST", "/api/focus/provider", {"provider": []})
+        self.assertEqual(status, 400)
+        self.assertIn("provider", body["error"])
+
     @patch("codexbar_touchbar.server.subprocess.run")
     def test_provider_focus_uses_allowlisted_app(self, run) -> None:
         status, body = self.request("POST", "/api/focus/provider", {"provider": "codex"})
