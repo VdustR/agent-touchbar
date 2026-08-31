@@ -126,6 +126,15 @@ def bridge_is_healthy() -> bool:
     return False
 
 
+def launch_agent_loaded() -> bool:
+    result = subprocess.run(
+        ["/bin/launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
 def doctor() -> int:
     checks: dict[str, object] = {}
     codexbar_available = False
@@ -143,7 +152,8 @@ def doctor() -> int:
         )
     except (FileNotFoundError, OSError, subprocess.SubprocessError):
         checks["betterTouchTool"] = False
-    checks["launchAgent"] = launch_agent_path().is_file()
+    checks["launchAgentConfigured"] = launch_agent_path().is_file()
+    checks["launchAgentLoaded"] = launch_agent_loaded()
     checks["bridge"] = bridge_is_healthy()
     store = StateStore(usage_ttl=0, sessions_ttl=0)
     store.wait_for_initial_data()
@@ -153,7 +163,8 @@ def doctor() -> int:
     checks["errors"] = snapshot["errors"]
     ok = (
         bool(checks.get("betterTouchTool"))
-        and bool(checks.get("launchAgent"))
+        and bool(checks.get("launchAgentConfigured"))
+        and bool(checks.get("launchAgentLoaded"))
         and bool(checks.get("bridge"))
         and not snapshot["errors"]["sessions"]
         and "codex" not in snapshot["errors"]["usage"]

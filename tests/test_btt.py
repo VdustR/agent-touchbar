@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import call, patch
 
-from codexbar_touchbar.btt import button_updates, definitions, install_widgets, persist_session_action, previous_slot_count, session_action, session_script, uninstall_widgets, update_buttons, widget_uuid
+from codexbar_touchbar.btt import button_updates, definitions, install_widgets, previous_slot_count, session_action, uninstall_widgets, update_buttons, widget_uuid
 
 
 class BetterTouchToolTests(unittest.TestCase):
@@ -42,12 +41,16 @@ class BetterTouchToolTests(unittest.TestCase):
             self.assertEqual(
                 action["BTTShellTaskActionConfig"], "/bin/bash:::-c:::-:::"
             )
+            config = item["BTTTriggerConfig"]
+            self.assertEqual(config["BTTTouchBarButtonFontSize"], 11)
+            self.assertEqual(config["BTTTouchBarButtonUseFixedWidth"], 1)
+            self.assertEqual(config["BTTTouchBarButtonUseFixedHeight"], 1)
             self.assertNotIn("BTTActionCategoryTouchRelease", item)
 
     def test_attention_sessions_sort_before_quota_and_active_after(self) -> None:
         snapshot = {"usage": [], "sessions": [
             {"id": "attention", "provider": "codex", "source": "desktopApp", "state": "needs_input"},
-            {"id": "active", "provider": "claude", "source": "desktopApp", "state": "active"},
+            {"id": "active", "provider": "codex", "source": "desktopApp", "state": "active"},
         ]}
         updates = dict(button_updates(snapshot, 2))
         self.assertLess(updates[widget_uuid("Agent session 1")]["BTTOrder"], 10)
@@ -128,9 +131,8 @@ class BetterTouchToolTests(unittest.TestCase):
             update_buttons({"usage": [], "sessions": []}, 1, None)
 
     @patch("codexbar_touchbar.btt.slot_action_path", return_value=Path("/missing/session-1.json"))
-    @patch("codexbar_touchbar.btt.persist_session_action")
     @patch("codexbar_touchbar.btt.run_cli")
-    def test_dynamic_session_trigger_is_created_and_removed(self, run_cli, persist, _path) -> None:
+    def test_dynamic_session_trigger_is_created_and_removed(self, run_cli, _path) -> None:
         run_cli.return_value = subprocess.CompletedProcess([], 0, "{}", "")
         active = {"usage": [], "sessions": [
             {"id": "one", "provider": "codex", "state": "active", "source": "desktopApp"}
@@ -141,33 +143,40 @@ class BetterTouchToolTests(unittest.TestCase):
         added_payload = json.loads(added[0].args[1].removeprefix("json="))
         self.assertEqual(added_payload["BTTTouchBarButtonName"], "● session")
         self.assertIn(
-            "session-1.json",
+            '"id":"one"',
+            added_payload["BTTTerminalCommand"],
+        )
+        self.assertEqual(added_payload["BTTPredefinedActionType"], 137)
+        self.assertIn(
+            '"id":"one"',
             added_payload["BTTActionsToExecute"][0]["BTTShellTaskActionScript"],
         )
-        persist.assert_called_once_with(0, "one")
         run_cli.reset_mock()
         run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
         update_buttons({"usage": [], "sessions": []}, 2, previous)
         deleted = [call.args[1] for call in run_cli.call_args_list if call.args[0] == "delete_trigger"]
         self.assertEqual(deleted, [f"uuid={widget_uuid('Agent session 1')}"])
 
-    @patch("codexbar_touchbar.btt.persist_session_action")
     @patch("codexbar_touchbar.btt.run_cli")
-    def test_session_action_updates_when_only_session_id_changes(self, run_cli, persist) -> None:
+    def test_session_identity_change_fully_replaces_trigger(self, run_cli) -> None:
+        run_cli.return_value = subprocess.CompletedProcess([], 0, "{}", "")
         previous_snapshot = {"usage": [], "sessions": [
             {"id": "old", "provider": "codex", "state": "active", "source": "desktopApp"}
         ]}
         current_snapshot = {"usage": [], "sessions": [
             {"id": "new", "provider": "codex", "state": "active", "source": "desktopApp"}
         ]}
-        previous = dict(button_updates(previous_snapshot, 1))
+        previous = update_buttons(previous_snapshot, 1, {})
+        run_cli.reset_mock()
+        run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
         update_buttons(current_snapshot, 1, previous)
-        persist.assert_called_once_with(0, "new")
-        run_cli.assert_not_called()
+        commands = [call.args[0] for call in run_cli.call_args_list]
+        self.assertEqual(commands, ["get_trigger", "delete_trigger", "add_new_trigger"])
+        added = json.loads(run_cli.call_args_list[-1].args[1].removeprefix("json="))
+        self.assertIn('"id":"new"', added["BTTTerminalCommand"])
 
-    @patch("codexbar_touchbar.btt.persist_session_action")
     @patch("codexbar_touchbar.btt.run_cli")
-    def test_changed_session_trigger_is_fully_replaced(self, run_cli, persist) -> None:
+    def test_changed_session_trigger_is_fully_replaced(self, run_cli) -> None:
         run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
         snapshot = {"usage": [], "sessions": [
             {"id": "new", "provider": "codex", "state": "active", "source": "desktopApp"}
@@ -179,11 +188,9 @@ class BetterTouchToolTests(unittest.TestCase):
             if call.args[0] != "update_trigger"
         ]
         self.assertEqual(commands, ["get_trigger", "delete_trigger", "add_new_trigger"])
-        persist.assert_called_once_with(0, "new")
 
-    @patch("codexbar_touchbar.btt.persist_session_action")
     @patch("codexbar_touchbar.btt.run_cli")
-    def test_failed_session_lookup_retains_previous_tap_target(self, run_cli, persist) -> None:
+    def test_failed_session_lookup_retains_previous_tap_target(self, run_cli) -> None:
         run_cli.return_value = subprocess.CompletedProcess(
             ["bttcli", "get_trigger"], 1, "", "socket unavailable"
         )
@@ -192,7 +199,15 @@ class BetterTouchToolTests(unittest.TestCase):
         ]}
         with self.assertRaises(subprocess.CalledProcessError):
             update_buttons(snapshot, 1, {widget_uuid("Agent session 1"): {"old": True}})
-        persist.assert_not_called()
+        session_calls = [
+            item
+            for item in run_cli.call_args_list
+            if item.args[0] in {"get_trigger", "delete_trigger", "add_new_trigger"}
+        ]
+        self.assertEqual(
+            session_calls,
+            [call("get_trigger", f"uuid={widget_uuid('Agent session 1')}", check=False)],
+        )
 
     def test_cli_sessions_are_not_rendered_as_desktop_buttons(self) -> None:
         snapshot = {
@@ -207,6 +222,21 @@ class BetterTouchToolTests(unittest.TestCase):
             updates[widget_uuid("Agent session 1")]["BTTTouchBarButtonName"],
             "○ ⌁ Project",
         )
+
+    def test_touch_bar_sessions_only_include_codex_desktop_tasks(self) -> None:
+        snapshot = {
+            "usage": [],
+            "sessions": [
+                {"id": "codex-active", "provider": "codex", "state": "active", "source": "desktopApp", "sessionName": "Active"},
+                {"id": "antigravity", "provider": "antigravity", "state": "available", "source": "appPresence", "sessionName": "Antigravity"},
+                {"id": "claude", "provider": "claude", "state": "idle", "source": "desktopApp", "sessionName": "Claude"},
+                {"id": "codex-idle", "provider": "codex", "state": "idle", "source": "desktopApp", "sessionName": "Idle"},
+            ],
+        }
+        updates = dict(button_updates(snapshot, 4))
+        self.assertEqual(updates[widget_uuid("Agent session 1")]["BTTTouchBarButtonName"], "● Active")
+        self.assertEqual(updates[widget_uuid("Agent session 2")]["BTTTouchBarButtonName"], "○ Idle")
+        self.assertNotIn(widget_uuid("Agent session 3"), updates)
 
     def test_sessions_without_supported_states_are_not_rendered(self) -> None:
         snapshot = {
@@ -250,46 +280,18 @@ class BetterTouchToolTests(unittest.TestCase):
         names = [item["BTTTouchBarButtonName"] for item in definitions()]
         self.assertNotIn("Attention session", names)
 
-    def test_session_action_uses_identity_persisted_by_render(self) -> None:
-        render = session_script(1)
-        action = session_action(1)
-        self.assertIn("session-2.json", render)
-        self.assertIn("session-2.json", action)
-        self.assertIn("os.replace", render)
-        self.assertIn("tempfile.mkstemp", render)
-        self.assertNotIn('action_path+".tmp"', render)
+    def test_session_action_binds_the_task_identity(self) -> None:
+        action = session_action("session-one")
+        self.assertIn('"id":"session-one"', action)
         self.assertNotIn("/api/btt", action)
 
-    def test_session_render_preserves_attention_visuals_during_refresh(self) -> None:
-        render = session_script(0)
-        self.assertIn('dot="!" if attention', render)
-        self.assertIn('bg="112, 35, 42, 255" if attention', render)
-        self.assertIn("approval_required", render)
-
-    def test_persisted_session_action_encodes_opaque_id_as_json(self) -> None:
-        with TemporaryDirectory() as temporary, patch(
-            "codexbar_touchbar.btt.data_dir", return_value=Path(temporary)
-        ):
-            persist_session_action(0, "thread'$(touch /tmp/nope)")
-            payload = json.loads((Path(temporary) / "actions/session-1.json").read_text())
-        self.assertEqual(payload, {"id": "thread'$(touch /tmp/nope)"})
-
-    def test_persisted_session_action_uses_unique_temporary_file(self) -> None:
-        with TemporaryDirectory() as temporary, patch(
-            "codexbar_touchbar.btt.data_dir", return_value=Path(temporary)
-        ), patch("codexbar_touchbar.btt.tempfile.mkstemp", wraps=tempfile.mkstemp) as mkstemp:
-            persist_session_action(0, "thread")
-        prefix = mkstemp.call_args.kwargs["prefix"]
-        self.assertEqual(prefix, ".session-1.json.")
-
-    @patch("codexbar_touchbar.btt.data_dir", return_value=Path("/tmp/Application Support/Test"))
-    def test_session_render_path_with_spaces_is_valid_python(self, _data_dir) -> None:
-        script = session_script(0)
+    def test_session_action_shell_quotes_opaque_id(self) -> None:
+        script = session_action("thread'$(touch /tmp/nope)")
         result = subprocess.run(
             ["/bin/bash", "-n", "-c", script], capture_output=True, text=True
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('action_path="/tmp/Application Support/Test/actions/session-1.json"', script)
+        self.assertIn("'\"'\"'", script)
 
     def test_reducing_slot_count_removes_excess_widgets(self) -> None:
         with TemporaryDirectory() as temporary:

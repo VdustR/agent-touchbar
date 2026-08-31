@@ -9,7 +9,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
-from codexbar_touchbar.server import ActionTracker, BttUpdateTracker, handler_factory
+from codexbar_touchbar.server import ActionTracker, BttUpdateTracker, handler_factory, task_fingerprint
 
 
 class FakeStore:
@@ -113,6 +113,15 @@ class ServerTests(unittest.TestCase):
         status, body = self.request("POST", "/api/focus/session", {"id": "unknown"})
         self.assertEqual(status, 400)
         self.assertIn("expired", body["error"])
+
+    def test_session_focus_records_privacy_safe_target_fingerprint(self) -> None:
+        status, body = self.request("POST", "/api/focus/session", {"id": "valid"})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        action = self.tracker.snapshot()
+        assert action is not None
+        self.assertEqual(action["target"], f"task:{task_fingerprint('valid')}")
+        self.assertNotIn("valid", json.dumps(action))
 
     def test_rejects_non_loopback_host_header(self) -> None:
         status, body = self.request("GET", "/api/btt", host="attacker.example")

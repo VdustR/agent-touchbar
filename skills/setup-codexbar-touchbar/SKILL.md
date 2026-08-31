@@ -21,19 +21,23 @@ third-party applications without explicit user authorization.
 4. Verify `http://127.0.0.1:4317/healthz` and inspect one
    `http://127.0.0.1:4317/api/btt` response. Do not print transcripts,
    credentials, cookies, or account identifiers.
-5. Inspect the managed triggers with BetterTouchTool CLI. Confirm every visible
-   session is a `BTTTriggerTypeTouchBar` trigger with type `629`, a nonempty
-   name, and a terminal action. Execute one stored quota action and one stored
-   session action, then verify `healthz.lastAction.outcome` is `succeeded`.
-6. When a physical Touch Bar is available, verify one quota tap and one session
+5. Compare visible, unarchived Codex Desktop tasks with `/api/btt`. Confirm the
+   task IDs and titles match and no Claude, Antigravity, CLI, review, or
+   subagent records appear as task buttons.
+6. Inspect the managed triggers with BetterTouchTool CLI. Confirm every visible
+   task is a `BTTTriggerTypeTouchBar` trigger with type `629`, a nonempty name,
+   a top-level terminal action, a standard action-sequence entry, and the
+   matching task ID. Execute one stored
+   quota action and one stored task action, then verify the matching
+   `healthz.lastAction` transition.
+7. When a physical Touch Bar is available, verify one quota tap and one task
    tap. Report physical input separately from scripted action verification.
 
-CodexBar is the source of truth for quota windows and normalized session state.
-Claude titles may be joined from its local desktop session metadata.
-Antigravity app presence may be reported when its process is running, but do
-not present it as a conversation. Display only states and quota windows that a
-source returns. Do not infer approval, error, completion, or attention states
-from idle time.
+Codex Desktop state is the task-list source. CodexBar is isolated to quota
+windows and the active-state overlay. Claude and Antigravity do not appear as
+task buttons; their quota buttons open the corresponding apps. Display only
+states and quota windows that a source returns. Do not infer approval, error,
+completion, or attention states from idle time.
 
 ## Uninstall
 
