@@ -36,6 +36,11 @@ def icon_path(provider: str) -> str:
     return str(data_dir() / "icons" / f"{provider}.png")
 
 
+def icon_data(provider: str) -> str | None:
+    path = Path(icon_path(provider))
+    return base64.b64encode(path.read_bytes()).decode() if path.is_file() else None
+
+
 def slot_state_path() -> Path:
     return data_dir() / "session-slots.json"
 
@@ -83,8 +88,9 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
             "BTTTouchBarAlwaysShowButton": True,
         },
     }
-    if provider and Path(icon_path(provider)).is_file():
-        result["BTTIconData"] = base64.b64encode(Path(icon_path(provider)).read_bytes()).decode()
+    encoded_icon = icon_data(provider) if provider else None
+    if encoded_icon:
+        result["BTTIconData"] = encoded_icon
         result["BTTTriggerConfig"]["BTTTouchBarItemIconWidth"] = 18
         result["BTTTriggerConfig"]["BTTTouchBarItemIconHeight"] = 18
     return result
@@ -123,6 +129,13 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
                 "BTTTerminalCommand": session_payload_action(item["id"]),
                 "BTTTriggerConfig": {"BTTTouchBarButtonColor": "27, 75, 61, 255" if active else "27, 32, 40, 255"},
             })
+            encoded_icon = icon_data(item.get("provider", ""))
+            if encoded_icon:
+                payload["BTTIconData"] = encoded_icon
+                payload["BTTTriggerConfig"].update({
+                    "BTTTouchBarItemIconWidth": 18,
+                    "BTTTouchBarItemIconHeight": 18,
+                })
         updates.append((widget_uuid(f"Agent session {index + 1}"), payload))
     return updates
 
