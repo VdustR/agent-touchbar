@@ -16,11 +16,6 @@ from urllib.parse import quote
 
 PROVIDERS = ("codex", "claude", "antigravity")
 APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity"}
-BUNDLE_IDS = {
-    "codex": "com.openai.codex",
-    "claude": "com.anthropic.claudefordesktop",
-    "antigravity": "com.google.antigravity",
-}
 WINDOW_LABELS = {300: "5h", 10080: "7d"}
 
 
@@ -86,48 +81,33 @@ class StateStore:
         self.sessions_ttl = sessions_ttl
         self.lock = threading.Lock()
         self.sessions = Cache([])
+        self.session_counts: dict[str, dict[str, int]] = {}
         self.usage = Cache([], error={})
-        self.title_cache: dict[str, tuple[int, int, str | None]] = {}
-
-    def _claude_title(self, session: dict[str, Any]) -> str | None:
-        transcript = session.get("transcriptPath")
-        session_id = session.get("id")
-        if session.get("provider") != "claude" or not isinstance(transcript, str):
-            return None
-        try:
-            stat = Path(transcript).stat()
-            cached = self.title_cache.get(transcript)
-            signature = (stat.st_mtime_ns, stat.st_size)
-            if cached and cached[:2] == signature:
-                return cached[2]
-            custom_title: str | None = None
-            ai_title: str | None = None
-            with Path(transcript).open(errors="replace") as stream:
-                for line in stream:
-                    try:
-                        record = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(record, dict) or record.get("sessionId") != session_id:
-                        continue
-                    if record.get("type") == "custom-title" and isinstance(record.get("customTitle"), str):
-                        custom_title = record["customTitle"].strip() or custom_title
-                    elif record.get("type") == "ai-title" and isinstance(record.get("aiTitle"), str):
-                        ai_title = record["aiTitle"].strip() or ai_title
-            title = custom_title or ai_title
-            self.title_cache[transcript] = (*signature, title)
-            return title
-        except OSError:
-            return None
 
     def _refresh_sessions(self) -> None:
+        counts: dict[str, dict[str, int]] = {}
         try:
             value, error = run_codexbar("sessions", "--json-v2", timeout=8), None
+            if isinstance(value, list):
+                for item in value:
+                    if not isinstance(item, dict):
+                        continue
+                    provider = item.get("provider")
+                    state = item.get("state")
+                    if provider in PROVIDERS and state in {"active", "idle"}:
+                        counts.setdefault(provider, {"active": 0, "idle": 0})[state] += 1
+                codex_sessions = [
+                    item
+                    for item in value
+                    if isinstance(item, dict) and item.get("provider") == "codex"
+                ]
+                value = codex_sessions
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
             value, error = None, str(caught)
         with self.lock:
             if value is not None:
                 self.sessions.value = value
+                self.session_counts = counts
             self.sessions.error = error
             self.sessions.updated_at = time.time()
             self.sessions.refreshing = False
@@ -194,11 +174,10 @@ class StateStore:
         self.refresh()
         with self.lock:
             sessions = [dict(item) for item in sorted(self.sessions.value, key=session_sort_key)]
-            for session in sessions:
-                session["sessionName"] = session.get("sessionName") or self._claude_title(session)
             return {
                 "generatedAt": datetime.now().astimezone().isoformat(),
                 "sessions": sessions,
+                "sessionCounts": self.session_counts,
                 "usage": self.usage.value,
                 "errors": {"sessions": self.sessions.error, "usage": self.usage.error},
             }
@@ -219,11 +198,6 @@ class StateStore:
                 timeout=3,
             )
             return
-        if session.get("source") == "desktopApp" and provider in BUNDLE_IDS:
-            subprocess.run(
-                ["/usr/bin/open", "-b", BUNDLE_IDS[provider]], check=True, timeout=3
-            )
-            return
         subprocess.run(
             [codexbar_path(), "sessions", "focus", session_id],
             check=True,
@@ -239,6 +213,7 @@ def compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
             "provider": item.get("provider"),
             "windows": quota_windows(item),
             "confidence": (item.get("usage") or {}).get("dataConfidence"),
+            "sessionCounts": snapshot.get("sessionCounts", {}).get(item.get("provider")),
         }
         for item in snapshot["usage"]
     ]

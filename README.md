@@ -11,29 +11,26 @@ read transcript contents, browser cookies, credentials, or account identifiers.
 The Touch Bar is ordered as follows:
 
 1. Codex, Claude, and Antigravity usage limits.
-2. Active desktop sessions, most recently active first.
-3. Idle desktop sessions, most recently active first.
+2. Active Codex desktop sessions, most recently active first.
+3. Idle Codex desktop sessions, most recently active first.
 
 Only windows returned by CodexBar are displayed. For example, an account with
 only a seven-day Codex window does not receive a synthetic five-hour window.
+Usage buttons also append nonzero `active` and `idle` session counts when
+CodexBar reports sessions for that provider. A missing session source is left
+blank rather than displayed as zero.
 Session state is limited to values reported by CodexBar; approval or error
 states are not inferred from inactivity.
 
-Session discovery, state, focus, and transcript paths follow CodexBar metadata.
-Codex desktop sessions normally include the conversation title. For Claude,
-the bridge reads only matching `custom-title` and `ai-title` metadata records
-from the discovered transcript; it does not read or expose message content. CLI
-sessions are excluded because their short terminal titles are not useful Touch
-Bar labels and cannot navigate to a desktop conversation.
+Codex session discovery, state, and focus follow CodexBar metadata. Claude Code
+and Antigravity remain quota providers but their sessions are not displayed.
+CLI sessions are excluded because their short terminal titles are not useful
+Touch Bar labels and cannot navigate to a desktop conversation.
 Project-name fallbacks are prefixed with `⌁` so they are not presented as
 conversation titles.
 
 Tapping a usage item opens or focuses its desktop application. Tapping a
-Codex desktop session opens its exact `codex://threads/<id>` deep link. Claude
-Code currently exposes no supported deep link for focusing an existing native
-Desktop session, so Claude buttons activate the app without switching its
-selected session. The unsafe `claude://resume` workaround is intentionally not
-used because it duplicates native sessions.
+Codex desktop session opens its exact `codex://threads/<id>` deep link.
 
 ## Requirements
 

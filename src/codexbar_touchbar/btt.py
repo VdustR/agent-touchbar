@@ -109,6 +109,12 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
                 value = 100 - used
                 remaining.append(value)
                 parts.append(f"{window.get('label', 'limit')} {value:.0f}%")
+        counts = snapshot.get("sessionCounts", {}).get(provider)
+        if isinstance(counts, dict):
+            for state in ("active", "idle"):
+                count = counts.get(state)
+                if isinstance(count, int) and count > 0:
+                    parts.append(f"{count} {state}")
         low = min(remaining) if remaining else 100
         color = "30, 78, 64, 255" if low >= 50 else ("112, 72, 22, 255" if low >= 20 else "112, 35, 42, 255")
         updates.append((widget_uuid(f"{provider.title()} usage"), {
@@ -116,7 +122,9 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
             "BTTTriggerConfig": {"BTTTouchBarButtonColor": color},
         }))
     sessions = [
-        item for item in snapshot.get("sessions", []) if item.get("source") == "desktopApp"
+        item
+        for item in snapshot.get("sessions", [])
+        if item.get("provider") == "codex" and item.get("source") == "desktopApp"
     ]
     for index in range(session_slots):
         item = sessions[index] if index < len(sessions) else None
@@ -166,6 +174,11 @@ if p:
  for x in w:
   if x.get("usedPercent") is not None:
    r=100-x["usedPercent"]; remaining.append(r); parts.append("{{}} {{:.0f}}%".format(x.get("label","limit"),r))
+ c=p.get("sessionCounts")
+ if isinstance(c,dict):
+  for state in ("active","idle"):
+   count=c.get(state)
+   if isinstance(count,int) and count>0: parts.append("{{}} {{}}".format(count,state))
  low=min(remaining) if remaining else 100
  bg="30, 78, 64, 255" if low>=50 else ("112, 72, 22, 255" if low>=20 else "112, 35, 42, 255")
  result={{"text":" · ".join(parts) or "—","background_color":bg,"font_color":"235, 248, 244, 255","font_size":11}}
@@ -215,7 +228,7 @@ def session_payload_action(session_id: str) -> str:
 def definitions(session_slots: int = 4) -> list[dict]:
     validate_slot_count(session_slots)
     result = [
-        widget(f"{provider.title()} usage", quota_script(provider), provider_action(provider), 104, 10 + index, 30)
+        widget(f"{provider.title()} usage", quota_script(provider), provider_action(provider), 172, 10 + index, 30)
         for index, provider in enumerate(PROVIDERS)
     ]
     result.extend(

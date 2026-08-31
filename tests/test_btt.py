@@ -30,7 +30,7 @@ class BetterTouchToolTests(unittest.TestCase):
     def test_native_button_updates_bind_visible_session_identity(self) -> None:
         snapshot = {
             "usage": [{"provider": "codex", "usage": {"primary": {"windowMinutes": 10080, "usedPercent": 25}}}],
-            "sessions": [{"id": "session-1", "state": "active", "source": "desktopApp", "sessionName": "Current"}],
+            "sessions": [{"id": "session-1", "provider": "codex", "state": "active", "source": "desktopApp", "sessionName": "Current"}],
         }
         updates = dict(button_updates(snapshot, 2))
         quota = updates[widget_uuid("Codex usage")]
@@ -39,6 +39,18 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertEqual(quota["BTTTouchBarButtonName"], "7d 75%")
         self.assertIn('session-1', session["BTTTerminalCommand"])
         self.assertFalse(empty["BTTEnabled"])
+
+    def test_quota_button_appends_only_observed_nonzero_session_states(self) -> None:
+        snapshot = {
+            "usage": [{"provider": "claude", "usage": {"primary": {"windowMinutes": 300, "usedPercent": 20}}}],
+            "sessionCounts": {"claude": {"active": 1, "idle": 2}},
+            "sessions": [],
+        }
+        updates = dict(button_updates(snapshot, 1))
+        self.assertEqual(
+            updates[widget_uuid("Claude usage")]["BTTTouchBarButtonName"],
+            "5h 80% · 1 active · 2 idle",
+        )
 
     @patch("codexbar_touchbar.btt.run_cli")
     def test_unchanged_native_buttons_are_not_reconfigured(self, run_cli) -> None:
@@ -52,8 +64,8 @@ class BetterTouchToolTests(unittest.TestCase):
         snapshot = {
             "usage": [],
             "sessions": [
-                {"id": "cli", "state": "active", "source": "cli", "projectName": "T"},
-                {"id": "desktop", "state": "idle", "source": "desktopApp", "projectName": "Project"},
+                {"id": "cli", "provider": "codex", "state": "active", "source": "cli", "projectName": "T"},
+                {"id": "desktop", "provider": "codex", "state": "idle", "source": "desktopApp", "projectName": "Project"},
             ],
         }
         updates = dict(button_updates(snapshot, 1))
@@ -61,6 +73,17 @@ class BetterTouchToolTests(unittest.TestCase):
             updates[widget_uuid("Agent session 1")]["BTTTouchBarButtonName"],
             "○ ⌁ Project",
         )
+
+    def test_non_codex_sessions_are_not_rendered(self) -> None:
+        snapshot = {
+            "usage": [],
+            "sessions": [
+                {"id": "claude", "provider": "claude", "source": "desktopApp"},
+                {"id": "antigravity", "provider": "antigravity", "source": "desktopApp"},
+            ],
+        }
+        updates = dict(button_updates(snapshot, 1))
+        self.assertFalse(updates[widget_uuid("Agent session 1")]["BTTEnabled"])
 
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
         names = [item["BTTTouchBarButtonName"] for item in definitions()]

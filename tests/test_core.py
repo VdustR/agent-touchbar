@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import unittest
-import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from codexbar_touchbar.core import StateStore, compact_snapshot, quota_windows, session_sort_key
@@ -12,19 +9,6 @@ from codexbar_touchbar.core import StateStore, compact_snapshot, quota_windows, 
 class CoreTests(unittest.TestCase):
     def test_session_refresh_interval_prioritizes_interactive_updates(self) -> None:
         self.assertLessEqual(StateStore().sessions_ttl, 0.75)
-
-    @patch("codexbar_touchbar.core.subprocess.run")
-    def test_desktop_session_focus_uses_cached_provider_without_rescan(self, run) -> None:
-        store = StateStore()
-        store.sessions.value = [
-            {"id": "claude-session", "provider": "claude", "source": "desktopApp"}
-        ]
-        store.focus_session("claude-session")
-        run.assert_called_once_with(
-            ["/usr/bin/open", "-b", "com.anthropic.claudefordesktop"],
-            check=True,
-            timeout=3,
-        )
 
     @patch("codexbar_touchbar.core.subprocess.run")
     def test_codex_session_focus_uses_thread_deep_link(self, run) -> None:
@@ -37,19 +21,27 @@ class CoreTests(unittest.TestCase):
             ["/usr/bin/open", "codex://threads/thread%2Fid"], check=True, timeout=3
         )
 
-    def test_claude_title_enrichment_reads_only_matching_title_metadata(self) -> None:
-        with TemporaryDirectory() as temporary:
-            transcript = Path(temporary) / "session.jsonl"
-            records = [
-                {"type": "user", "sessionId": "wanted", "message": {"content": "private"}},
-                {"type": "ai-title", "sessionId": "other", "aiTitle": "Wrong"},
-                {"type": "ai-title", "sessionId": "wanted", "aiTitle": "Generated"},
-                {"type": "custom-title", "sessionId": "wanted", "customTitle": "Chosen"},
-            ]
-            transcript.write_text("\n".join(json.dumps(item) for item in records))
-            store = StateStore()
-            session = {"id": "wanted", "provider": "claude", "transcriptPath": str(transcript)}
-            self.assertEqual(store._claude_title(session), "Chosen")
+    def test_session_refresh_keeps_only_codex_sessions(self) -> None:
+        store = StateStore()
+        sessions = [
+            {"id": "codex", "provider": "codex"},
+            {"id": "claude", "provider": "claude"},
+            {"id": "antigravity", "provider": "antigravity"},
+        ]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value, [{"id": "codex", "provider": "codex"}])
+
+    def test_session_refresh_counts_supported_states_for_each_provider(self) -> None:
+        store = StateStore()
+        sessions = [
+            {"id": "1", "provider": "claude", "state": "active"},
+            {"id": "2", "provider": "claude", "state": "idle"},
+            {"id": "3", "provider": "claude", "state": "unknown"},
+        ]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+            store._refresh_sessions()
+        self.assertEqual(store.session_counts["claude"], {"active": 1, "idle": 1})
 
     def test_usage_refresh_preserves_failed_provider_cache(self) -> None:
         store = StateStore()
@@ -94,11 +86,13 @@ class CoreTests(unittest.TestCase):
             "generatedAt": "now",
             "usage": [{"provider": "codex", "accountEmail": "private", "usage": {}}],
             "sessions": [{"id": "1", "provider": "codex", "transcriptPath": "/private"}],
+            "sessionCounts": {"codex": {"active": 1, "idle": 0}},
         }
         result = compact_snapshot(snapshot)
         encoded = str(result)
         self.assertNotIn("private", encoded)
         self.assertNotIn("transcriptPath", encoded)
+        self.assertEqual(result["providers"][0]["sessionCounts"], {"active": 1, "idle": 0})
 
 
 if __name__ == "__main__":
