@@ -1,0 +1,94 @@
+"""Loopback-only HTTP bridge used by BetterTouchTool widgets."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Protocol
+from urllib.parse import urlparse
+
+from .core import APP_NAMES, StateStore, compact_snapshot
+
+
+class StateSource(Protocol):
+    def snapshot(self) -> dict[str, Any]: ...
+    def focus_session(self, session_id: str) -> None: ...
+
+
+def handler_factory(store: StateSource) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "CodexBarTouchBar/0.1"
+
+        def log_message(self, format: str, *args: Any) -> None:
+            return
+
+        def send_json(self, data: Any, status: int = 200) -> None:
+            body = json.dumps(data, ensure_ascii=False).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def read_payload(self) -> dict[str, Any]:
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if content_type != "application/json":
+                raise ValueError("Content-Type must be application/json")
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 1 or length > 4096:
+                raise ValueError("Invalid request size")
+            value = json.loads(self.rfile.read(length))
+            if not isinstance(value, dict):
+                raise ValueError("Invalid request body")
+            return value
+
+        def do_GET(self) -> None:
+            path = urlparse(self.path).path
+            if path == "/api/state":
+                self.send_json(store.snapshot())
+            elif path == "/api/btt":
+                self.send_json(compact_snapshot(store.snapshot()))
+            elif path == "/healthz":
+                snapshot = store.snapshot()
+                status = HTTPStatus.OK if not snapshot["errors"]["sessions"] else HTTPStatus.SERVICE_UNAVAILABLE
+                self.send_json({"ok": status == HTTPStatus.OK, "errors": snapshot["errors"]}, status)
+            else:
+                self.send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
+
+        def do_POST(self) -> None:
+            try:
+                payload = self.read_payload()
+                path = urlparse(self.path).path
+                if path == "/api/focus/session":
+                    session_id = payload.get("id")
+                    if not isinstance(session_id, str) or len(session_id) > 128:
+                        raise ValueError("Invalid session id")
+                    store.focus_session(session_id)
+                    self.send_json({"ok": True, "id": session_id})
+                    return
+                if path == "/api/focus/provider":
+                    provider = payload.get("provider")
+                    if provider not in APP_NAMES:
+                        raise ValueError("Unknown provider")
+                    subprocess.run(["/usr/bin/open", "-a", APP_NAMES[provider]], check=True, timeout=8)
+                    self.send_json({"ok": True, "provider": provider})
+                    return
+                self.send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
+            except (ValueError, json.JSONDecodeError) as error:
+                self.send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+            except (OSError, subprocess.SubprocessError) as error:
+                self.send_json({"error": str(error)}, HTTPStatus.BAD_GATEWAY)
+
+    return Handler
+
+
+def serve(host: str, port: int, store: StateStore | None = None) -> None:
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise ValueError("The bridge only permits a loopback host")
+    state = store or StateStore()
+    state.wait_for_initial_data()
+    ThreadingHTTPServer((host, port), handler_factory(state)).serve_forever()
