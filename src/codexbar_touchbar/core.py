@@ -22,13 +22,13 @@ WINDOW_LABELS = {300: "5h", 10080: "7d"}
 def find_executable(name: str, candidates: tuple[str, ...]) -> str:
     override = os.environ.get(f"CODEXBAR_TOUCHBAR_{name.upper()}")
     if override and Path(override).is_file():
-        return override
+        return str(Path(override).resolve())
     resolved = shutil.which(name)
     if resolved:
-        return resolved
+        return str(Path(resolved).resolve())
     for candidate in candidates:
         if Path(candidate).is_file():
-            return candidate
+            return str(Path(candidate).resolve())
     raise FileNotFoundError(f"Required executable not found: {name}")
 
 

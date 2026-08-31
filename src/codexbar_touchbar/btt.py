@@ -115,8 +115,8 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
                 count = counts.get(state)
                 if isinstance(count, int) and count > 0:
                     parts.append(f"{count} {state}")
-        low = min(remaining) if remaining else 100
-        color = "30, 78, 64, 255" if low >= 50 else ("112, 72, 22, 255" if low >= 20 else "112, 35, 42, 255")
+        low = min(remaining) if remaining else None
+        color = "55, 60, 68, 255" if low is None else ("30, 78, 64, 255" if low >= 50 else ("112, 72, 22, 255" if low >= 20 else "112, 35, 42, 255"))
         updates.append((widget_uuid(f"{provider.title()} usage"), {
             "BTTTouchBarButtonName": " · ".join(parts) or "—",
             "BTTTriggerConfig": {"BTTTouchBarButtonColor": color},
@@ -181,8 +181,8 @@ if p:
   for state in ("active","idle"):
    count=c.get(state)
    if isinstance(count,int) and count>0: parts.append("{{}} {{}}".format(count,state))
- low=min(remaining) if remaining else 100
- bg="30, 78, 64, 255" if low>=50 else ("112, 72, 22, 255" if low>=20 else "112, 35, 42, 255")
+ low=min(remaining) if remaining else None
+ bg="55, 60, 68, 255" if low is None else ("30, 78, 64, 255" if low>=50 else ("112, 72, 22, 255" if low>=20 else "112, 35, 42, 255"))
  result={{"text":" · ".join(parts) or "—","background_color":bg,"font_color":"235, 248, 244, 255","font_size":11}}
  if os.path.isfile("{icon_path(provider)}"): result["icon_path"]="{icon_path(provider)}"
  print(json.dumps(result,ensure_ascii=False))

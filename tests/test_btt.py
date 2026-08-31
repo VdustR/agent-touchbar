@@ -52,6 +52,13 @@ class BetterTouchToolTests(unittest.TestCase):
             "5h 80% · 1 active · 2 idle",
         )
 
+    def test_missing_quota_uses_neutral_color(self) -> None:
+        updates = dict(button_updates({"usage": [], "sessions": []}, 1))
+        self.assertEqual(
+            updates[widget_uuid("Codex usage")]["BTTTriggerConfig"]["BTTTouchBarButtonColor"],
+            "55, 60, 68, 255",
+        )
+
     @patch("codexbar_touchbar.btt.run_cli")
     def test_unchanged_native_buttons_are_not_reconfigured(self, run_cli) -> None:
         snapshot = {"usage": [], "sessions": []}

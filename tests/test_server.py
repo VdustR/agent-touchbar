@@ -12,8 +12,11 @@ from codexbar_touchbar.server import ActionTracker, handler_factory
 
 
 class FakeStore:
+    include_usage = True
+
     def snapshot(self) -> dict[str, Any]:
-        return {"generatedAt": "now", "sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}
+        usage = [{"provider": "codex", "usage": {}}] if self.include_usage else []
+        return {"generatedAt": "now", "sessions": [], "usage": usage, "errors": {"sessions": None, "usage": {}}}
 
     def focus_session(self, session_id: str) -> None:
         if session_id != "valid":
@@ -24,8 +27,9 @@ class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.tracker = ActionTracker()
+        cls.store = FakeStore()
         cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", 0), handler_factory(FakeStore(), cls.tracker)
+            ("127.0.0.1", 0), handler_factory(cls.store, cls.tracker)
         )
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -54,6 +58,15 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
         self.assertIsNone(body["lastAction"])
+
+    def test_health_requires_codex_usage(self) -> None:
+        self.store.include_usage = False
+        try:
+            status, body = self.request("GET", "/healthz")
+        finally:
+            self.store.include_usage = True
+        self.assertEqual(status, 503)
+        self.assertFalse(body["ok"])
 
     def test_session_focus_rejects_unknown_id(self) -> None:
         status, body = self.request("POST", "/api/focus/session", {"id": "unknown"})

@@ -100,7 +100,17 @@ def handler_factory(
                 self.send_json(compact_snapshot(store.snapshot()))
             elif path == "/healthz":
                 snapshot = store.snapshot()
-                status = HTTPStatus.OK if not snapshot["errors"]["sessions"] else HTTPStatus.SERVICE_UNAVAILABLE
+                providers = {
+                    item.get("provider")
+                    for item in snapshot["usage"]
+                    if isinstance(item, dict)
+                }
+                healthy = (
+                    not snapshot["errors"]["sessions"]
+                    and "codex" not in snapshot["errors"]["usage"]
+                    and "codex" in providers
+                )
+                status = HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE
                 self.send_json(
                     {
                         "ok": status == HTTPStatus.OK,
