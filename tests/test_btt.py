@@ -9,13 +9,15 @@ from codexbar_touchbar.btt import definitions, install_widgets, session_action, 
 
 
 class BetterTouchToolTests(unittest.TestCase):
-    def test_definitions_have_stable_unique_ids_and_primary_actions(self) -> None:
+    def test_definitions_have_stable_unique_ids_and_widget_native_actions(self) -> None:
         widgets = definitions()
         identifiers = [item["BTTUUID"] for item in widgets]
         self.assertEqual(len(identifiers), len(set(identifiers)))
         self.assertEqual(identifiers[0], widget_uuid("Codex usage"))
         for item in widgets:
-            self.assertIn("BTTActionsToExecute", item)
+            self.assertEqual(item["BTTPredefinedActionType"], 137)
+            self.assertIn("curl", item["BTTTerminalCommand"])
+            self.assertNotIn("BTTActionsToExecute", item)
             self.assertNotIn("BTTActionCategoryTouchRelease", item)
 
     def test_layout_places_quota_before_sessions(self) -> None:
