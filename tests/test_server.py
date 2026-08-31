@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import unittest
 from http.client import HTTPConnection
@@ -8,7 +9,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
-from codexbar_touchbar.server import ActionTracker, handler_factory
+from codexbar_touchbar.server import ActionTracker, BttUpdateTracker, handler_factory
 
 
 class FakeStore:
@@ -27,9 +28,11 @@ class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.tracker = ActionTracker()
+        cls.btt_tracker = BttUpdateTracker()
         cls.store = FakeStore()
         cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", 0), handler_factory(cls.store, cls.tracker)
+            ("127.0.0.1", 0),
+            handler_factory(cls.store, cls.tracker, cls.btt_tracker),
         )
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -58,7 +61,23 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["service"], "codexbar-touchbar")
         self.assertTrue(body["ok"])
+        self.assertTrue(body["bttUpdate"]["ok"])
         self.assertIsNone(body["lastAction"])
+
+    def test_health_reports_and_clears_btt_update_failure(self) -> None:
+        self.btt_tracker.record_failure(subprocess.CalledProcessError(1, ["bttcli"]))
+        try:
+            status, body = self.request("GET", "/healthz")
+            self.assertEqual(status, 503)
+            self.assertFalse(body["bttUpdate"]["ok"])
+            self.assertEqual(body["bttUpdate"]["errorType"], "CalledProcessError")
+            self.assertNotIn("bttcli", json.dumps(body["bttUpdate"]))
+        finally:
+            self.btt_tracker.record_success()
+        status, body = self.request("GET", "/healthz")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["bttUpdate"]["ok"])
+        self.assertIsNone(body["bttUpdate"]["errorType"])
 
     def test_health_requires_codex_usage(self) -> None:
         self.store.include_usage = False

@@ -43,10 +43,45 @@ class ActionTracker:
             return dict(self._value) if self._value else None
 
 
+class BttUpdateTracker:
+    """Record privacy-safe BetterTouchTool update health."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._value: dict[str, Any] = {
+            "ok": True,
+            "lastSuccessAt": None,
+            "errorType": None,
+        }
+
+    def record_success(self) -> None:
+        with self._lock:
+            self._value = {
+                "ok": True,
+                "lastSuccessAt": datetime.now(timezone.utc).isoformat(),
+                "errorType": None,
+            }
+
+    def record_failure(self, error: BaseException) -> None:
+        with self._lock:
+            self._value = {
+                **self._value,
+                "ok": False,
+                "errorType": type(error).__name__,
+            }
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._value)
+
+
 def handler_factory(
-    store: StateSource, action_tracker: ActionTracker | None = None
+    store: StateSource,
+    action_tracker: ActionTracker | None = None,
+    btt_update_tracker: BttUpdateTracker | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     tracker = action_tracker or ActionTracker()
+    btt_tracker = btt_update_tracker or BttUpdateTracker()
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "CodexBarTouchBar"
@@ -107,6 +142,7 @@ def handler_factory(
                     not snapshot["errors"]["sessions"]
                     and "codex" not in snapshot["errors"]["usage"]
                     and "codex" in providers
+                    and btt_tracker.snapshot()["ok"] is True
                 )
                 status = HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE
                 self.send_json(
@@ -114,6 +150,7 @@ def handler_factory(
                         "service": "codexbar-touchbar",
                         "ok": status == HTTPStatus.OK,
                         "errors": snapshot["errors"],
+                        "bttUpdate": btt_tracker.snapshot(),
                         "lastAction": tracker.snapshot(),
                     },
                     status,
@@ -169,6 +206,7 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
         raise ValueError("The bridge only permits a loopback host")
     state = store or StateStore()
     state.wait_for_initial_data()
+    btt_tracker = BttUpdateTracker()
     def update_loop() -> None:
         previous: dict[str, dict] | None = None
         retry_delay = 0.25
@@ -179,8 +217,10 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
                 previous = update_buttons(
                     state.snapshot(), previous_slot_count(), previous
                 )
+                btt_tracker.record_success()
                 retry_delay = 0.25
-            except (OSError, subprocess.SubprocessError, ValueError):
+            except (OSError, subprocess.SubprocessError, ValueError) as error:
+                btt_tracker.record_failure(error)
                 retry_delay = min(max(retry_delay * 2, 1.0), 8.0)
             time.sleep(retry_delay)
 
@@ -191,4 +231,4 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
             address_family = socket.AF_INET6
 
         server_type = IPv6ThreadingHTTPServer
-    server_type((host, port), handler_factory(state)).serve_forever()
+    server_type((host, port), handler_factory(state, btt_update_tracker=btt_tracker)).serve_forever()
