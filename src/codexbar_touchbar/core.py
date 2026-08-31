@@ -15,6 +15,11 @@ from typing import Any
 
 PROVIDERS = ("codex", "claude", "antigravity")
 APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity"}
+BUNDLE_IDS = {
+    "codex": "com.openai.codex",
+    "claude": "com.anthropic.claudefordesktop",
+    "antigravity": "com.google.antigravity",
+}
 WINDOW_LABELS = {300: "5h", 10080: "7d"}
 
 
@@ -198,9 +203,19 @@ class StateStore:
             }
 
     def focus_session(self, session_id: str) -> None:
-        sessions = run_codexbar("sessions", "--json-v2", timeout=8)
-        if session_id not in {item.get("id") for item in sessions}:
+        with self.lock:
+            session = next(
+                (dict(item) for item in self.sessions.value if item.get("id") == session_id),
+                None,
+            )
+        if session is None:
             raise ValueError("Unknown or expired session id")
+        provider = session.get("provider")
+        if session.get("source") == "desktopApp" and provider in BUNDLE_IDS:
+            subprocess.run(
+                ["/usr/bin/open", "-b", BUNDLE_IDS[provider]], check=True, timeout=3
+            )
+            return
         subprocess.run(
             [codexbar_path(), "sessions", "focus", session_id],
             check=True,

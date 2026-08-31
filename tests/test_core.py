@@ -13,6 +13,19 @@ class CoreTests(unittest.TestCase):
     def test_session_refresh_interval_prioritizes_interactive_updates(self) -> None:
         self.assertLessEqual(StateStore().sessions_ttl, 0.75)
 
+    @patch("codexbar_touchbar.core.subprocess.run")
+    def test_desktop_session_focus_uses_cached_provider_without_rescan(self, run) -> None:
+        store = StateStore()
+        store.sessions.value = [
+            {"id": "claude-session", "provider": "claude", "source": "desktopApp"}
+        ]
+        store.focus_session("claude-session")
+        run.assert_called_once_with(
+            ["/usr/bin/open", "-b", "com.anthropic.claudefordesktop"],
+            check=True,
+            timeout=3,
+        )
+
     def test_claude_title_enrichment_reads_only_matching_title_metadata(self) -> None:
         with TemporaryDirectory() as temporary:
             transcript = Path(temporary) / "session.jsonl"

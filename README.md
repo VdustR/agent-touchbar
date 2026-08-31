@@ -29,9 +29,9 @@ Project-name fallbacks are prefixed with `⌁` so they are not presented as
 conversation titles.
 
 Tapping a usage item opens or focuses its desktop application. Tapping a
-session calls `codexbar sessions focus <id>`, which activates the owning
-desktop application or terminal. CodexBar does not guarantee navigation to a
-specific desktop conversation.
+desktop session validates the cached CodexBar identity and immediately
+activates the owning desktop application. Neither CodexBar nor the desktop apps
+currently expose navigation to a specific conversation through this interface.
 
 ## Requirements
 
