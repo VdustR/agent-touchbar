@@ -26,15 +26,19 @@ class BetterTouchToolTests(unittest.TestCase):
             timeout=BTT_CLI_TIMEOUT_SECONDS,
         )
 
-    def test_definitions_have_stable_unique_ids_and_widget_native_actions(self) -> None:
+    def test_definitions_have_stable_unique_ids_and_standard_tap_actions(self) -> None:
         widgets = definitions()
         identifiers = [item["BTTUUID"] for item in widgets]
         self.assertEqual(len(identifiers), len(set(identifiers)))
         self.assertEqual(identifiers[0], widget_uuid("Codex usage"))
         for item in widgets:
-            self.assertEqual(item["BTTPredefinedActionType"], 137)
-            self.assertIn("curl", item["BTTTerminalCommand"])
-            self.assertNotIn("BTTActionsToExecute", item)
+            self.assertNotIn("BTTPredefinedActionType", item)
+            self.assertNotIn("BTTTerminalCommand", item)
+            self.assertEqual(len(item["BTTActionsToExecute"]), 1)
+            action = item["BTTActionsToExecute"][0]
+            self.assertEqual(action["BTTActionCategory"], 0)
+            self.assertEqual(action["BTTPredefinedActionType"], 137)
+            self.assertIn("curl", action["BTTTerminalCommand"])
             self.assertNotIn("BTTActionCategoryTouchRelease", item)
 
     def test_attention_sessions_sort_before_quota_and_active_after(self) -> None:
@@ -133,7 +137,10 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertEqual(len(added), 1)
         added_payload = json.loads(added[0].args[1].removeprefix("json="))
         self.assertEqual(added_payload["BTTTouchBarButtonName"], "● session")
-        self.assertIn("session-1.json", added_payload["BTTTerminalCommand"])
+        self.assertIn(
+            "session-1.json",
+            added_payload["BTTActionsToExecute"][0]["BTTTerminalCommand"],
+        )
         persist.assert_called_once_with(0, "one")
         run_cli.reset_mock()
         run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
