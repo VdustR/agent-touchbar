@@ -12,4 +12,3 @@ rm -f "$COMMAND"
 
 echo "Removed the service, command, and BetterTouchTool widgets."
 echo "Runtime logs and extracted icons remain at: $INSTALL_ROOT"
-

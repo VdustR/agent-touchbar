@@ -33,4 +33,3 @@ idle time.
 Run `./scripts/uninstall.sh`. It removes the LaunchAgent, command symlink, and
 managed BetterTouchTool widgets. It intentionally retains runtime logs and
 extracted icons and prints their location so removal remains recoverable.
-

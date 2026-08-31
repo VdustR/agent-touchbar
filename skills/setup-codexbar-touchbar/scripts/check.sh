@@ -21,4 +21,3 @@ fi
 
 python3 -c 'import sys; print("python:", sys.version.split()[0]); raise SystemExit(sys.version_info < (3, 11))' || missing=1
 exit "$missing"
-

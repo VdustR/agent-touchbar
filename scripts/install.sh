@@ -29,4 +29,3 @@ ln -sfn "$VENV/bin/codexbar-touchbar" "$BIN_DIR/codexbar-touchbar"
 "$BIN_DIR/codexbar-touchbar" doctor
 
 echo "Installed codexbar-touchbar at $BIN_DIR/codexbar-touchbar"
-
