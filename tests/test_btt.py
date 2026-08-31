@@ -85,6 +85,16 @@ class BetterTouchToolTests(unittest.TestCase):
         updates = dict(button_updates(snapshot, 1))
         self.assertFalse(updates[widget_uuid("Agent session 1")]["BTTEnabled"])
 
+    def test_unsupported_codex_session_state_is_not_rendered_as_idle(self) -> None:
+        snapshot = {
+            "usage": [],
+            "sessions": [
+                {"id": "ended", "provider": "codex", "source": "desktopApp", "state": "ended"},
+            ],
+        }
+        updates = dict(button_updates(snapshot, 1))
+        self.assertFalse(updates[widget_uuid("Agent session 1")]["BTTEnabled"])
+
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
         names = [item["BTTTouchBarButtonName"] for item in definitions()]
         self.assertNotIn("Attention session", names)
@@ -129,6 +139,7 @@ class BetterTouchToolTests(unittest.TestCase):
             }
             self.assertIn(f"uuid={widget_uuid('Agent session 3')}", deleted)
             self.assertIn(f"uuid={widget_uuid('Agent session 5')}", deleted)
+            self.assertIn(f"uuid={widget_uuid('Agent session 12')}", deleted)
 
     def test_install_replaces_managed_triggers_to_avoid_merged_actions(self) -> None:
         with TemporaryDirectory() as temporary:

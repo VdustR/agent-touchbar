@@ -52,6 +52,7 @@ def install_service() -> None:
         "ProcessType": "Interactive",
         "EnvironmentVariables": {
             "CODEXBAR_TOUCHBAR_CODEXBAR": codexbar_path(),
+            "CODEXBAR_TOUCHBAR_BTTCLI": bttcli_path(),
             "CODEXBAR_TOUCHBAR_DATA_DIR": str(data_dir()),
         },
     }

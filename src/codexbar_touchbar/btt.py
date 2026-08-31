@@ -124,7 +124,9 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
     sessions = [
         item
         for item in snapshot.get("sessions", [])
-        if item.get("provider") == "codex" and item.get("source") == "desktopApp"
+        if item.get("provider") == "codex"
+        and item.get("source") == "desktopApp"
+        and item.get("state") in {"active", "idle"}
     ]
     for index in range(session_slots):
         item = sessions[index] if index < len(sessions) else None
@@ -244,7 +246,6 @@ def run_cli(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def install_widgets(session_slots: int = 4) -> list[str]:
     validate_slot_count(session_slots)
-    old_slot_count = previous_slot_count()
     results = []
     for definition in definitions(session_slots):
         trigger_id = definition["BTTUUID"]
@@ -263,7 +264,7 @@ def install_widgets(session_slots: int = 4) -> list[str]:
             run_cli("delete_trigger", f"uuid={legacy_id}")
             results.append(f"delete_trigger: {legacy_name}")
     run_cli("delete_trigger", "uuid=E4F85058-56B7-4DBD-9064-3C26F11B8C52", check=False)
-    for index in range(session_slots, old_slot_count):
+    for index in range(session_slots, 12):
         name = f"Agent session {index + 1}"
         run_cli("delete_trigger", f"uuid={widget_uuid(name)}", check=False)
         results.append(f"delete_trigger: {name}")

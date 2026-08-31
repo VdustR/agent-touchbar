@@ -19,12 +19,17 @@ class CliTests(unittest.TestCase):
                 patch("codexbar_touchbar.cli.launch_agent_path", return_value=plist),
                 patch("codexbar_touchbar.cli.data_dir", return_value=Path(temporary)),
                 patch("codexbar_touchbar.cli.sys.argv", ["/custom/current/codexbar-touchbar"]),
+                patch("codexbar_touchbar.cli.bttcli_path", return_value="/custom/bin/bttcli"),
             ):
                 install_service()
             payload = plistlib.loads(plist.read_bytes())
             self.assertEqual(
                 payload["EnvironmentVariables"]["CODEXBAR_TOUCHBAR_CODEXBAR"],
                 "/custom/bin/codexbar",
+            )
+            self.assertEqual(
+                payload["EnvironmentVariables"]["CODEXBAR_TOUCHBAR_BTTCLI"],
+                "/custom/bin/bttcli",
             )
             self.assertEqual(
                 payload["EnvironmentVariables"]["CODEXBAR_TOUCHBAR_DATA_DIR"],
@@ -45,6 +50,7 @@ class CliTests(unittest.TestCase):
                 patch("codexbar_touchbar.cli.data_dir", return_value=Path(temporary)),
                 patch("codexbar_touchbar.cli.sys.executable", "/custom/bin/python"),
                 patch("codexbar_touchbar.cli.sys.argv", ["/package/codexbar_touchbar/__main__.py"]),
+                patch("codexbar_touchbar.cli.bttcli_path", return_value="/custom/bin/bttcli"),
             ):
                 install_service()
             payload = plistlib.loads(plist.read_bytes())
