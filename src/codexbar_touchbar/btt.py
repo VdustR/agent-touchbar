@@ -34,6 +34,25 @@ def icon_path(provider: str) -> str:
     return str(data_dir() / "icons" / f"{provider}.png")
 
 
+def slot_state_path() -> Path:
+    return data_dir() / "session-slots.json"
+
+
+def previous_slot_count(default: int = 4) -> int:
+    try:
+        payload = json.loads(slot_state_path().read_text())
+        value = payload.get("sessionSlots")
+        return value if isinstance(value, int) and 1 <= value <= 12 else default
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def validate_slot_count(value: int) -> int:
+    if not 1 <= value <= 12:
+        raise ValueError("session slots must be between 1 and 12")
+    return value
+
+
 def widget(name: str, script: str, action: str, width: int, order: int, interval: float) -> dict:
     return {
         "BTTUUID": widget_uuid(name),
@@ -54,7 +73,7 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
             "BTTTouchBarScriptUpdateInterval": interval,
             "BTTTouchBarAlwaysShowButton": True,
         },
-        "BTTActionCategoryTouchRelease": [{
+        "BTTActionsToExecute": [{
             "BTTPredefinedActionType": 137,
             "BTTTerminalCommand": action,
         }],
@@ -105,6 +124,7 @@ if [ -n "$SESSION_ID" ]; then /usr/bin/curl -sf -X POST -H 'Content-Type: applic
 
 
 def definitions(session_slots: int = 4) -> list[dict]:
+    validate_slot_count(session_slots)
     result = [
         widget(f"{provider.title()} usage", quota_script(provider), provider_action(provider), 104, 10 + index, 30)
         for index, provider in enumerate(PROVIDERS)
@@ -121,6 +141,8 @@ def run_cli(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def install_widgets(session_slots: int = 4) -> list[str]:
+    validate_slot_count(session_slots)
+    old_slot_count = previous_slot_count()
     results = []
     for definition in definitions(session_slots):
         trigger_id = definition["BTTUUID"]
@@ -136,10 +158,17 @@ def install_widgets(session_slots: int = 4) -> list[str]:
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={legacy_id}")
             results.append(f"delete_trigger: {legacy_name}")
+    for index in range(session_slots, old_slot_count):
+        name = f"Agent session {index + 1}"
+        run_cli("delete_trigger", f"uuid={widget_uuid(name)}", check=False)
+        results.append(f"delete_trigger: {name}")
+    slot_state_path().parent.mkdir(parents=True, exist_ok=True)
+    slot_state_path().write_text(json.dumps({"sessionSlots": session_slots}) + "\n")
     return results
 
 
 def uninstall_widgets(session_slots: int = 4) -> list[str]:
+    session_slots = max(validate_slot_count(session_slots), previous_slot_count())
     names = [f"{provider.title()} usage" for provider in PROVIDERS]
     names.extend(f"Agent session {index + 1}" for index in range(session_slots))
     removed = []
@@ -149,6 +178,7 @@ def uninstall_widgets(session_slots: int = 4) -> list[str]:
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={trigger_id}")
             removed.append(name)
+    slot_state_path().unlink(missing_ok=True)
     return removed
 
 

@@ -37,6 +37,9 @@ def install_service() -> None:
         "StandardOutPath": str(log_dir / "stdout.log"),
         "StandardErrorPath": str(log_dir / "stderr.log"),
         "ProcessType": "Interactive",
+        "EnvironmentVariables": {
+            "CODEXBAR_TOUCHBAR_CODEXBAR": codexbar_path(),
+        },
     }
     target.write_bytes(plistlib.dumps(payload))
     subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(target)], capture_output=True)
