@@ -8,7 +8,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
-from codexbar_touchbar.server import handler_factory
+from codexbar_touchbar.server import ActionTracker, handler_factory
 
 
 class FakeStore:
@@ -23,7 +23,10 @@ class FakeStore:
 class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), handler_factory(FakeStore()))
+        cls.tracker = ActionTracker()
+        cls.server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), handler_factory(FakeStore(), cls.tracker)
+        )
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         cls.port = cls.server.server_address[1]
@@ -48,6 +51,7 @@ class ServerTests(unittest.TestCase):
         status, body = self.request("GET", "/healthz")
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
+        self.assertIsNone(body["lastAction"])
 
     def test_session_focus_rejects_unknown_id(self) -> None:
         status, body = self.request("POST", "/api/focus/session", {"id": "unknown"})
@@ -65,6 +69,11 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
         run.assert_called_once_with(["/usr/bin/open", "-a", "ChatGPT"], check=True, timeout=8)
+        action = self.tracker.snapshot()
+        self.assertIsNotNone(action)
+        assert action is not None
+        self.assertEqual(action["outcome"], "succeeded")
+        self.assertEqual(action["target"], "codex")
 
 
 if __name__ == "__main__":
