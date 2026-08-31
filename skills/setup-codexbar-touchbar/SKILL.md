@@ -21,12 +21,19 @@ third-party applications without explicit user authorization.
 4. Verify `http://127.0.0.1:4317/healthz` and inspect one
    `http://127.0.0.1:4317/api/btt` response. Do not print transcripts,
    credentials, cookies, or account identifiers.
-5. Ask the user to tap one quota widget and one session widget because software
-   checks cannot prove physical Touch Bar input.
+5. Inspect the managed triggers with BetterTouchTool CLI. Confirm every visible
+   session is a `BTTTriggerTypeTouchBar` trigger with type `629`, a nonempty
+   name, and a terminal action. Execute one stored quota action and one stored
+   session action, then verify `healthz.lastAction.outcome` is `succeeded`.
+6. When a physical Touch Bar is available, verify one quota tap and one session
+   tap. Report physical input separately from scripted action verification.
 
-CodexBar is the source of truth. Display only states and quota windows it
-returns. Do not infer approval, error, completion, or attention states from
-idle time.
+CodexBar is the source of truth for quota windows and normalized session state.
+Claude titles may be joined from its local desktop session metadata.
+Antigravity app presence may be reported when its process is running, but do
+not present it as a conversation. Display only states and quota windows that a
+source returns. Do not infer approval, error, completion, or attention states
+from idle time.
 
 ## Uninstall
 
