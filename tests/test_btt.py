@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-import unittest
 import subprocess
+import tempfile
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -218,6 +219,8 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertIn("session-2.json", render)
         self.assertIn("session-2.json", action)
         self.assertIn("os.replace", render)
+        self.assertIn("tempfile.mkstemp", render)
+        self.assertNotIn('action_path+".tmp"', render)
         self.assertNotIn("/api/btt", action)
 
     def test_session_render_preserves_attention_visuals_during_refresh(self) -> None:
@@ -233,6 +236,14 @@ class BetterTouchToolTests(unittest.TestCase):
             persist_session_action(0, "thread'$(touch /tmp/nope)")
             payload = json.loads((Path(temporary) / "actions/session-1.json").read_text())
         self.assertEqual(payload, {"id": "thread'$(touch /tmp/nope)"})
+
+    def test_persisted_session_action_uses_unique_temporary_file(self) -> None:
+        with TemporaryDirectory() as temporary, patch(
+            "codexbar_touchbar.btt.data_dir", return_value=Path(temporary)
+        ), patch("codexbar_touchbar.btt.tempfile.mkstemp", wraps=tempfile.mkstemp) as mkstemp:
+            persist_session_action(0, "thread")
+        prefix = mkstemp.call_args.kwargs["prefix"]
+        self.assertEqual(prefix, ".session-1.json.")
 
     @patch("codexbar_touchbar.btt.data_dir", return_value=Path("/tmp/Application Support/Test"))
     def test_session_render_path_with_spaces_is_valid_python(self, _data_dir) -> None:

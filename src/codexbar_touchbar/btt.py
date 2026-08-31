@@ -8,6 +8,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -237,14 +238,22 @@ def session_definition(index: int) -> dict:
 def persist_session_action(index: int, session_id: str) -> None:
     action_path = slot_action_path(index)
     action_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = action_path.with_suffix(action_path.suffix + ".tmp")
-    temporary.write_text(json.dumps({"id": session_id}, separators=(",", ":")))
-    temporary.replace(action_path)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{action_path.name}.", dir=action_path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(json.dumps({"id": session_id}, separators=(",", ":")))
+        temporary.replace(action_path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def quota_script(provider: str) -> str:
     return rf'''/usr/bin/curl -sf {BASE_URL}/api/btt | /usr/bin/python3 -c '
-import json,os,sys
+import json,os,sys,tempfile
 d=json.load(sys.stdin)
 p=next((x for x in d.get("providers",[]) if x.get("provider")=="{provider}"),None)
 if p:
@@ -282,7 +291,14 @@ if not x:
  print("")
 else:
  os.makedirs(os.path.dirname(action_path),exist_ok=True)
- temporary=action_path+".tmp"; open(temporary,"w").write(json.dumps({{"id":x["id"]}})); os.replace(temporary,action_path)
+ fd,temporary=tempfile.mkstemp(prefix="."+os.path.basename(action_path)+".",dir=os.path.dirname(action_path))
+ try:
+  with os.fdopen(fd,"w") as f: f.write(json.dumps({{"id":x["id"]}}))
+  os.replace(temporary,action_path)
+ except BaseException:
+  try: os.unlink(temporary)
+  except FileNotFoundError: pass
+  raise
  state=x.get("state") or "idle"; attention=state in {sorted(ATTENTION_STATES)!r}; dot="!" if attention else ("●" if state=="active" else "○")
  name=x.get("sessionName") or x.get("projectName") or "session"; provider=x.get("provider") or "agent"
  bg="112, 35, 42, 255" if attention else ("27, 75, 61, 255" if state=="active" else "27, 32, 40, 255"); fg="255, 236, 238, 255" if attention else ("230, 250, 242, 255" if state=="active" else "190, 201, 214, 255")
