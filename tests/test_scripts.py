@@ -8,6 +8,14 @@ from pathlib import Path
 
 
 class ScriptTests(unittest.TestCase):
+    def test_ci_runs_the_declared_static_type_check(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        workflow = (repository / ".github/workflows/ci.yml").read_text()
+        project = (repository / "pyproject.toml").read_text()
+        self.assertIn("pyright src tests", workflow)
+        self.assertIn("'.[dev]'", workflow)
+        self.assertIn('pyright==1.1.413', project)
+
     def test_fallback_uninstall_does_not_suppress_unexpected_bootout_failures(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
         self.assertIn("Could not find specified service", script)
