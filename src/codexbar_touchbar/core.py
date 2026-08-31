@@ -111,6 +111,7 @@ class StateStore:
                 if isinstance(item, dict)
                 and item.get("provider") == "codex"
                 and isinstance(item.get("id"), str)
+                and isinstance(item.get("state"), str)
             ]
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
             value, error = None, str(caught)
@@ -178,7 +179,9 @@ class StateStore:
 
     def _start_if_stale(self, cache: Cache, ttl: float, target: Any, name: str) -> None:
         with self.lock:
-            if time.monotonic() - cache.updated_at < ttl or cache.refreshing:
+            if cache.refreshing or (
+                cache.updated_at != 0 and time.monotonic() - cache.updated_at < ttl
+            ):
                 return
             cache.refreshing = True
         threading.Thread(target=target, daemon=True, name=name).start()

@@ -222,6 +222,13 @@ class BetterTouchToolTests(unittest.TestCase):
             with patch("codexbar_touchbar.btt.slot_state_path", return_value=state):
                 self.assertEqual(previous_slot_count(), 12)
 
+    def test_boolean_slot_state_defaults_to_managing_all_slots(self) -> None:
+        with TemporaryDirectory() as temporary:
+            state = Path(temporary) / "session-slots.json"
+            state.write_text('{"sessionSlots": true}')
+            with patch("codexbar_touchbar.btt.slot_state_path", return_value=state):
+                self.assertEqual(previous_slot_count(), 12)
+
     def test_install_fails_when_excess_slot_cannot_be_deleted(self) -> None:
         with TemporaryDirectory() as temporary:
             with (

@@ -37,13 +37,16 @@ class CoreTests(unittest.TestCase):
     def test_session_refresh_keeps_only_codex_sessions(self) -> None:
         store = StateStore()
         sessions = [
-            {"id": "codex", "provider": "codex"},
+            {"id": "codex", "provider": "codex", "state": "active"},
             {"id": "claude", "provider": "claude"},
             {"id": "antigravity", "provider": "antigravity"},
         ]
         with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value, [{"id": "codex", "provider": "codex"}])
+        self.assertEqual(
+            store.sessions.value,
+            [{"id": "codex", "provider": "codex", "state": "active"}],
+        )
 
     def test_session_refresh_rejects_codex_sessions_without_string_ids(self) -> None:
         store = StateStore()
@@ -86,6 +89,15 @@ class CoreTests(unittest.TestCase):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["codex"], {"active": 1, "idle": 0})
         self.assertFalse(store.sessions.refreshing)
+        self.assertEqual([item["id"] for item in store.sessions.value], ["valid"])
+
+    @patch("codexbar_touchbar.core.threading.Thread")
+    def test_uninitialized_cache_always_refreshes(self, thread) -> None:
+        store = StateStore(usage_ttl=60)
+        with patch("codexbar_touchbar.core.time.monotonic", return_value=10):
+            store._start_if_stale(store.usage, 60, store._refresh_usage, "usage")
+        self.assertTrue(store.usage.refreshing)
+        thread.assert_called_once()
 
     def test_usage_refresh_preserves_failed_provider_cache(self) -> None:
         store = StateStore()

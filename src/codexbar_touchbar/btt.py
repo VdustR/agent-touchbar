@@ -60,7 +60,11 @@ def previous_slot_count(default: int = 12) -> int:
         if not isinstance(payload, dict):
             return default
         value = payload.get("sessionSlots")
-        return value if isinstance(value, int) and 1 <= value <= 12 else default
+        return (
+            value
+            if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 12
+            else default
+        )
     except (OSError, json.JSONDecodeError):
         return default
 
