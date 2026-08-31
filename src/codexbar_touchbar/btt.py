@@ -86,11 +86,13 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
         "BTTTouchBarButtonName": name,
         "BTTEnabled": 1,
         "BTTOrder": order,
-        # Touch Bar script widgets still read their primary tap action from
-        # these legacy top-level fields in BTT 6.x. BTTActionsToExecute works
-        # through the scripting API but is not dispatched by a physical tap.
-        "BTTPredefinedActionType": 137,
-        "BTTTerminalCommand": action,
+        "BTTActionsToExecute": [
+            {
+                "BTTActionCategory": 0,
+                "BTTPredefinedActionType": 137,
+                "BTTTerminalCommand": action,
+            }
+        ],
         "BTTTriggerConfig": {
             "BTTTouchBarButtonColor": "20, 25, 32, 255",
             "BTTTouchBarFontColor": "235, 241, 248, 255",
