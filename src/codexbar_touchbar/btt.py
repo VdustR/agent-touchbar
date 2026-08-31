@@ -16,6 +16,7 @@ from .core import ATTENTION_STATES, APP_NAMES, PROVIDERS, find_executable, quota
 
 NAMESPACE = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
 BASE_URL = "http://127.0.0.1:4317"
+BTT_CLI_TIMEOUT_SECONDS = 5.0
 
 
 def bttcli_path() -> str:
@@ -331,7 +332,13 @@ def definitions(session_slots: int = 4) -> list[dict]:
 
 
 def run_cli(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([bttcli_path(), *args], check=check, capture_output=True, text=True)
+    return subprocess.run(
+        [bttcli_path(), *args],
+        check=check,
+        capture_output=True,
+        text=True,
+        timeout=BTT_CLI_TIMEOUT_SECONDS,
+    )
 
 
 def install_widgets(session_slots: int = 4) -> list[str]:

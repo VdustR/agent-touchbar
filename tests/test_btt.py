@@ -12,6 +12,20 @@ from codexbar_touchbar.btt import button_updates, definitions, install_widgets, 
 
 
 class BetterTouchToolTests(unittest.TestCase):
+    @patch("codexbar_touchbar.btt.bttcli_path", return_value="/bin/bttcli")
+    @patch("codexbar_touchbar.btt.subprocess.run")
+    def test_run_cli_has_a_bounded_timeout(self, run, _path) -> None:
+        from codexbar_touchbar.btt import BTT_CLI_TIMEOUT_SECONDS, run_cli
+
+        run_cli("get_trigger", "uuid=test", check=False)
+        run.assert_called_once_with(
+            ["/bin/bttcli", "get_trigger", "uuid=test"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=BTT_CLI_TIMEOUT_SECONDS,
+        )
+
     def test_definitions_have_stable_unique_ids_and_widget_native_actions(self) -> None:
         widgets = definitions()
         identifiers = [item["BTTUUID"] for item in widgets]
