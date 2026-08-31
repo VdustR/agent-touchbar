@@ -1,0 +1,1 @@
+"""CodexBar Touch Bar integration."""
