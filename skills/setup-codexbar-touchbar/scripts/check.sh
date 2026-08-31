@@ -21,7 +21,10 @@ else
   missing=1
 fi
 
-BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli}
+BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-$(command -v bttcli || true)}
+if [ -z "$BTTCLI" ]; then
+  BTTCLI=/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli
+fi
 if [ -x "$BTTCLI" ]; then
   printf 'ok: BetterTouchTool CLI (%s)\n' "$BTTCLI"
 else
