@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.btt import button_updates, definitions, install_widgets, session_action, session_script, widget_uuid
+from codexbar_touchbar.btt import button_updates, definitions, install_widgets, session_action, session_script, update_buttons, widget_uuid
 
 
 class BetterTouchToolTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class BetterTouchToolTests(unittest.TestCase):
     def test_native_button_updates_bind_visible_session_identity(self) -> None:
         snapshot = {
             "usage": [{"provider": "codex", "usage": {"primary": {"windowMinutes": 10080, "usedPercent": 25}}}],
-            "sessions": [{"id": "session-1", "state": "active", "sessionName": "Current"}],
+            "sessions": [{"id": "session-1", "state": "active", "source": "desktopApp", "sessionName": "Current"}],
         }
         updates = dict(button_updates(snapshot, 2))
         quota = updates[widget_uuid("Codex usage")]
@@ -39,6 +39,28 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertEqual(quota["BTTTouchBarButtonName"], "7d 75%")
         self.assertIn('session-1', session["BTTTerminalCommand"])
         self.assertFalse(empty["BTTEnabled"])
+
+    @patch("codexbar_touchbar.btt.run_cli")
+    def test_unchanged_native_buttons_are_not_reconfigured(self, run_cli) -> None:
+        snapshot = {"usage": [], "sessions": []}
+        previous = update_buttons(snapshot, 2)
+        first_count = run_cli.call_count
+        update_buttons(snapshot, 2, previous)
+        self.assertEqual(run_cli.call_count, first_count)
+
+    def test_cli_sessions_are_not_rendered_as_desktop_buttons(self) -> None:
+        snapshot = {
+            "usage": [],
+            "sessions": [
+                {"id": "cli", "state": "active", "source": "cli", "projectName": "T"},
+                {"id": "desktop", "state": "idle", "source": "desktopApp", "projectName": "Project"},
+            ],
+        }
+        updates = dict(button_updates(snapshot, 1))
+        self.assertEqual(
+            updates[widget_uuid("Agent session 1")]["BTTTouchBarButtonName"],
+            "○ Project",
+        )
 
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
         names = [item["BTTTouchBarButtonName"] for item in definitions()]

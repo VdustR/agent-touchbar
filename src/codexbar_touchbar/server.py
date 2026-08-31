@@ -142,9 +142,12 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
     state = store or StateStore()
     state.wait_for_initial_data()
     def update_loop() -> None:
+        previous: dict[str, dict] = {}
         while True:
             try:
-                update_buttons(state.snapshot(), previous_slot_count())
+                previous = update_buttons(
+                    state.snapshot(), previous_slot_count(), previous
+                )
             except (OSError, subprocess.SubprocessError, ValueError):
                 pass
             time.sleep(2)

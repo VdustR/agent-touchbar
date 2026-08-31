@@ -109,7 +109,9 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
             "BTTTouchBarButtonName": " · ".join(parts) or "—",
             "BTTTriggerConfig": {"BTTTouchBarButtonColor": color},
         }))
-    sessions = snapshot.get("sessions", [])
+    sessions = [
+        item for item in snapshot.get("sessions", []) if item.get("source") == "desktopApp"
+    ]
     for index in range(session_slots):
         item = sessions[index] if index < len(sessions) else None
         payload: dict = {"BTTEnabled": bool(item)}
@@ -125,9 +127,18 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
     return updates
 
 
-def update_buttons(snapshot: dict, session_slots: int = 4) -> None:
-    for trigger_id, payload in button_updates(snapshot, session_slots):
-        run_cli("update_trigger", f"uuid={trigger_id}", f"json={json.dumps(payload, separators=(',', ':'))}")
+def update_buttons(
+    snapshot: dict, session_slots: int = 4, previous: dict[str, dict] | None = None
+) -> dict[str, dict]:
+    current = dict(button_updates(snapshot, session_slots))
+    for trigger_id, payload in current.items():
+        if previous is None or previous.get(trigger_id) != payload:
+            run_cli(
+                "update_trigger",
+                f"uuid={trigger_id}",
+                f"json={json.dumps(payload, separators=(',', ':'))}",
+            )
+    return current
 
 
 def quota_script(provider: str) -> str:
