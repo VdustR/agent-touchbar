@@ -34,10 +34,22 @@ def launch_agent_path() -> Path:
 
 
 def stop_service() -> None:
-    subprocess.run(
+    result = subprocess.run(
         ["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"],
         capture_output=True,
+        text=True,
     )
+    if result.returncode != 0 and not any(
+        message in result.stderr
+        for message in (
+            "Could not find service",
+            "Could not find specified service",
+            "No such process",
+        )
+    ):
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
 
 
 def install_service() -> None:

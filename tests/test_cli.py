@@ -1,18 +1,35 @@
 from __future__ import annotations
 
 import plistlib
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.cli import doctor, install_service, main, uninstall_service
+from codexbar_touchbar.cli import doctor, install_service, main, stop_service, uninstall_service
 
 
 class CliTests(unittest.TestCase):
     @patch("codexbar_touchbar.cli.subprocess.run")
+    def test_stop_service_accepts_missing_launch_agent(self, run) -> None:
+        run.return_value.returncode = 3
+        run.return_value.stderr = 'Could not find service "com.vdustr.codexbar-touchbar"'
+        stop_service()
+
+    @patch("codexbar_touchbar.cli.subprocess.run")
+    def test_stop_service_rejects_unexpected_launchctl_failure(self, run) -> None:
+        run.return_value.returncode = 1
+        run.return_value.stdout = ""
+        run.return_value.stderr = "Not privileged"
+        run.return_value.args = ["launchctl", "bootout"]
+        with self.assertRaises(subprocess.CalledProcessError):
+            stop_service()
+
+    @patch("codexbar_touchbar.cli.subprocess.run")
     @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
     def test_launch_agent_pins_resolved_codexbar(self, _codexbar, _run) -> None:
+        _run.return_value.returncode = 0
         with TemporaryDirectory() as temporary:
             plist = Path(temporary) / "agent.plist"
             with (
@@ -43,6 +60,7 @@ class CliTests(unittest.TestCase):
     @patch("codexbar_touchbar.cli.subprocess.run")
     @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
     def test_module_install_preserves_python_interpreter(self, _codexbar, _run) -> None:
+        _run.return_value.returncode = 0
         with TemporaryDirectory() as temporary:
             plist = Path(temporary) / "agent.plist"
             with (
