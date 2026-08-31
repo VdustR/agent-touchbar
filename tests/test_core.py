@@ -10,6 +10,9 @@ from codexbar_touchbar.core import StateStore, compact_snapshot, quota_windows, 
 
 
 class CoreTests(unittest.TestCase):
+    def test_session_refresh_interval_prioritizes_interactive_updates(self) -> None:
+        self.assertLessEqual(StateStore().sessions_ttl, 0.75)
+
     def test_claude_title_enrichment_reads_only_matching_title_metadata(self) -> None:
         with TemporaryDirectory() as temporary:
             transcript = Path(temporary) / "session.jsonl"

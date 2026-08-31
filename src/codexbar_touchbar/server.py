@@ -145,12 +145,14 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
         previous: dict[str, dict] = {}
         while True:
             try:
+                state.refresh()
+                state.wait_for_session_data()
                 previous = update_buttons(
                     state.snapshot(), previous_slot_count(), previous
                 )
             except (OSError, subprocess.SubprocessError, ValueError):
                 pass
-            time.sleep(2)
+            time.sleep(0.25)
 
     threading.Thread(target=update_loop, daemon=True, name="btt-buttons").start()
     ThreadingHTTPServer((host, port), handler_factory(state)).serve_forever()

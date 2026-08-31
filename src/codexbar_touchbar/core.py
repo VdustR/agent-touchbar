@@ -75,7 +75,7 @@ class Cache:
 
 
 class StateStore:
-    def __init__(self, usage_ttl: float = 60, sessions_ttl: float = 1.5) -> None:
+    def __init__(self, usage_ttl: float = 60, sessions_ttl: float = 0.75) -> None:
         self.usage_ttl = usage_ttl
         self.sessions_ttl = sessions_ttl
         self.lock = threading.Lock()
@@ -173,6 +173,14 @@ class StateStore:
         while time.monotonic() < deadline:
             with self.lock:
                 if not self.sessions.refreshing and not self.usage.refreshing:
+                    return
+            time.sleep(0.05)
+
+    def wait_for_session_data(self, timeout: float = 9) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self.lock:
+                if not self.sessions.refreshing:
                     return
             time.sleep(0.05)
 
