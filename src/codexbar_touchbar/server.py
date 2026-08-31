@@ -49,7 +49,7 @@ def handler_factory(
     tracker = action_tracker or ActionTracker()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "CodexBarTouchBar/0.1"
+        server_version = "CodexBarTouchBar"
 
         def log_message(self, format: str, *args: Any) -> None:
             return

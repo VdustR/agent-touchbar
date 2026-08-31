@@ -63,7 +63,7 @@ Verify the installation:
 curl --fail http://127.0.0.1:4317/healthz
 ```
 
-To update, pull a newer release and run `./scripts/install.sh` again.
+To update, pull the latest `main` branch and run `./scripts/install.sh` again.
 
 ## Uninstall
 

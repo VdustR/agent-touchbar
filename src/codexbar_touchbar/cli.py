@@ -14,7 +14,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import __version__
 from .btt import (
     bttcli_path,
     data_dir,
@@ -133,7 +132,6 @@ def doctor() -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="codexbar-touchbar")
-    parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("serve")
     install_parser = commands.add_parser("install")
