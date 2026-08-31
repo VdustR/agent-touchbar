@@ -88,6 +88,7 @@ def bridge_is_healthy() -> bool:
                 payload = json.loads(response.read())
             if (
                 response.status == 200
+                and isinstance(payload, dict)
                 and payload.get("service") == "codexbar-touchbar"
                 and payload.get("ok") is True
             ):
