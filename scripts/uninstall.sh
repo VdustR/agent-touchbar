@@ -14,7 +14,7 @@ if [ -x "$COMMAND" ]; then
 elif [ -x "$VENV_COMMAND" ]; then
   "$VENV_COMMAND" uninstall "$@"
 else
-  /bin/launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
+  /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>/dev/null || true
   rm -f "$PLIST"
   if [ -x "$BTTCLI" ]; then
     python3 - <<'PY' | while IFS= read -r trigger_id; do

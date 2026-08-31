@@ -80,6 +80,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.Path.is_dir", return_value=True),
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
+            patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             run_cli.return_value.returncode = 0
@@ -94,6 +95,7 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.launch_agent_path") as plist,
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
+            patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True
@@ -113,6 +115,27 @@ class CliTests(unittest.TestCase):
             patch("codexbar_touchbar.cli.launch_agent_path") as plist,
             patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
             patch("codexbar_touchbar.cli.run_cli") as run_cli,
+            patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("codexbar_touchbar.cli.StateStore") as store_type,
+        ):
+            plist.return_value.is_file.return_value = True
+            run_cli.return_value.returncode = 0
+            run_cli.return_value.stdout = '{"BTTUUID":"installed"}'
+            store_type.return_value.snapshot.return_value = snapshot
+            self.assertEqual(doctor(), 1)
+
+    def test_doctor_requires_running_bridge(self) -> None:
+        snapshot = {
+            "sessions": [],
+            "usage": [{"provider": "codex", "usage": {}}],
+            "errors": {"sessions": None, "usage": {}},
+        }
+        with (
+            patch("codexbar_touchbar.cli.codexbar_path", return_value="/bin/codexbar"),
+            patch("codexbar_touchbar.cli.launch_agent_path") as plist,
+            patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
+            patch("codexbar_touchbar.cli.run_cli") as run_cli,
+            patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=False),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True

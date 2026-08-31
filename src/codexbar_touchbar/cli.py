@@ -9,6 +9,9 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from . import __version__
@@ -78,6 +81,20 @@ def uninstall_service() -> None:
     target.unlink(missing_ok=True)
 
 
+def bridge_is_healthy() -> bool:
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:4317/healthz", timeout=0.5) as response:
+                payload = json.loads(response.read())
+            if response.status == 200 and payload.get("ok") is True:
+                return True
+        except (OSError, urllib.error.URLError, json.JSONDecodeError):
+            pass
+        time.sleep(0.25)
+    return False
+
+
 def doctor() -> int:
     checks: dict[str, object] = {}
     try:
@@ -94,6 +111,7 @@ def doctor() -> int:
     except (FileNotFoundError, OSError, subprocess.SubprocessError):
         checks["betterTouchTool"] = False
     checks["launchAgent"] = launch_agent_path().is_file()
+    checks["bridge"] = bridge_is_healthy()
     store = StateStore(usage_ttl=0, sessions_ttl=0)
     store.wait_for_initial_data()
     snapshot = store.snapshot()
@@ -103,6 +121,7 @@ def doctor() -> int:
     ok = (
         bool(checks.get("betterTouchTool"))
         and bool(checks.get("launchAgent"))
+        and bool(checks.get("bridge"))
         and not snapshot["errors"]["sessions"]
         and "codex" not in snapshot["errors"]["usage"]
         and "codex" in checks["usageProviders"]

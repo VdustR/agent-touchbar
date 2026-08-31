@@ -15,7 +15,12 @@ elif ! command -v codexbar >/dev/null 2>&1; then
   echo "codexbar is required: https://github.com/steipete/CodexBar" >&2
   exit 1
 fi
-if [ ! -x /Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli ]; then
+if [ -n "${CODEXBAR_TOUCHBAR_BTTCLI:-}" ]; then
+  if [ ! -x "$CODEXBAR_TOUCHBAR_BTTCLI" ]; then
+    echo "CODEXBAR_TOUCHBAR_BTTCLI must point to an executable." >&2
+    exit 1
+  fi
+elif [ ! -x /Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli ]; then
   echo "BetterTouchTool with its CLI is required." >&2
   exit 1
 fi
