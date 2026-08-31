@@ -49,7 +49,7 @@ def slot_action_path(index: int) -> Path:
     return data_dir() / "actions" / f"session-{index + 1}.json"
 
 
-def previous_slot_count(default: int = 4) -> int:
+def previous_slot_count(default: int = 12) -> int:
     try:
         payload = json.loads(slot_state_path().read_text())
         value = payload.get("sessionSlots")
@@ -277,6 +277,7 @@ def uninstall_widgets(session_slots: int = 4) -> list[str]:
     validate_slot_count(session_slots)
     session_slots = 12
     names = [f"{provider.title()} usage" for provider in PROVIDERS]
+    names.extend(("Attention session", "Agent usage"))
     names.extend(f"Agent session {index + 1}" for index in range(session_slots))
     removed = []
     for name in names:
@@ -290,6 +291,15 @@ def uninstall_widgets(session_slots: int = 4) -> list[str]:
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={trigger_id}")
             removed.append(name)
+    legacy_id = "E4F85058-56B7-4DBD-9064-3C26F11B8C52"
+    lookup = run_cli("get_trigger", f"uuid={legacy_id}", check=False)
+    if lookup.returncode != 0:
+        raise subprocess.CalledProcessError(
+            lookup.returncode, lookup.args, lookup.stdout, lookup.stderr
+        )
+    if lookup.stdout.strip() not in {"", "null", "{}", "[]"}:
+        run_cli("delete_trigger", f"uuid={legacy_id}")
+        removed.append("Legacy agent usage")
     slot_state_path().unlink(missing_ok=True)
     return removed
 

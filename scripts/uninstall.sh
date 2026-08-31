@@ -7,6 +7,7 @@ COMMAND="$BIN_DIR/codexbar-touchbar"
 
 VENV_COMMAND="$INSTALL_ROOT/venv/bin/codexbar-touchbar"
 BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli}
+PYTHON_BIN=${CODEXBAR_TOUCHBAR_PYTHON:-$(command -v python3 || true)}
 PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.plist"
 
 if [ -x "$COMMAND" ]; then
@@ -16,8 +17,13 @@ elif [ -x "$VENV_COMMAND" ]; then
 else
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>/dev/null || true
   rm -f "$PLIST"
-  if [ -x "$BTTCLI" ]; then
-    python3 - <<'PY' | while IFS= read -r trigger_id; do
+  cleanup_failed=0
+  if [ -x "$BTTCLI" ] && [ -x "$PYTHON_BIN" ]; then
+    while IFS= read -r trigger_id; do
+      if ! "$BTTCLI" delete_trigger "uuid=$trigger_id" >/dev/null 2>&1; then
+        cleanup_failed=1
+      fi
+    done < <("$PYTHON_BIN" - <<'PY'
 import uuid
 
 namespace = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
@@ -25,9 +31,15 @@ names = ["Codex usage", "Claude usage", "Antigravity usage", "Attention session"
 names.extend(f"Agent session {index}" for index in range(1, 13))
 for name in names:
     print(str(uuid.uuid5(namespace, name)).upper())
+print("E4F85058-56B7-4DBD-9064-3C26F11B8C52")
 PY
-      "$BTTCLI" delete_trigger "uuid=$trigger_id" >/dev/null 2>&1 || true
-    done
+    )
+  else
+    cleanup_failed=1
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    echo "Failed to remove one or more BetterTouchTool widgets." >&2
+    exit 1
   fi
 fi
 rm -f "$COMMAND"

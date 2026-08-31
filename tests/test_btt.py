@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.btt import button_updates, definitions, install_widgets, session_action, session_payload_action, session_script, uninstall_widgets, update_buttons, widget_uuid
+from codexbar_touchbar.btt import button_updates, definitions, install_widgets, previous_slot_count, session_action, session_payload_action, session_script, uninstall_widgets, update_buttons, widget_uuid
 
 
 class BetterTouchToolTests(unittest.TestCase):
@@ -170,6 +170,11 @@ class BetterTouchToolTests(unittest.TestCase):
             uninstall_widgets(1)
         looked_up = {call.args[1] for call in run_cli.call_args_list if call.args[0] == "get_trigger"}
         self.assertIn(f"uuid={widget_uuid('Agent session 12')}", looked_up)
+        self.assertIn(f"uuid={widget_uuid('Attention session')}", looked_up)
+
+    def test_missing_slot_state_defaults_to_managing_all_slots(self) -> None:
+        with patch("codexbar_touchbar.btt.slot_state_path", return_value=Path("/missing")):
+            self.assertEqual(previous_slot_count(), 12)
 
 
 if __name__ == "__main__":
