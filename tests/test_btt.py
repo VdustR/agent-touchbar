@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -37,6 +38,15 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertIn("session-2.json", action)
         self.assertIn("os.replace", render)
         self.assertNotIn("/api/btt", action)
+
+    @patch("codexbar_touchbar.btt.data_dir", return_value=Path("/tmp/Application Support/Test"))
+    def test_session_render_path_with_spaces_is_valid_python(self, _data_dir) -> None:
+        script = session_script(0)
+        result = subprocess.run(
+            ["/bin/bash", "-n", "-c", script], capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('action_path="/tmp/Application Support/Test/actions/session-1.json"', script)
 
     def test_reducing_slot_count_removes_excess_widgets(self) -> None:
         with TemporaryDirectory() as temporary:

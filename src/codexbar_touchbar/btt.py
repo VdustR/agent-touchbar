@@ -110,10 +110,11 @@ def provider_action(provider: str) -> str:
 
 def session_script(index: int) -> str:
     action_path = slot_action_path(index)
+    python_action_path = json.dumps(str(action_path))
     return rf'''/usr/bin/curl -sf {BASE_URL}/api/btt | /usr/bin/python3 -c '
 import json,os,sys
 d=json.load(sys.stdin); s=d.get("sessions",[]); x=s[{index}] if len(s)>{index} else None
-action_path={str(action_path)!r}
+action_path={python_action_path}
 if not x:
  try: os.unlink(action_path)
  except FileNotFoundError: pass
