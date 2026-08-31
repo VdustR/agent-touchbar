@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -282,6 +283,48 @@ class CoreTests(unittest.TestCase):
         run.assert_called_once_with(
             ["/usr/bin/open", "-a", "Claude"], check=True, timeout=8
         )
+
+    def test_claude_metadata_cache_does_not_reparse_unchanged_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            metadata = (
+                home
+                / "Library/Application Support/Claude/claude-code-sessions"
+                / "account/project/local_session.json"
+            )
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text(json.dumps({
+                "cliSessionId": "cli-id",
+                "sessionId": "local-id",
+                "title": "Visible title",
+            }))
+            store = StateStore()
+            with (
+                patch("codexbar_touchbar.core.Path.home", return_value=home),
+                patch("codexbar_touchbar.core.json.loads", wraps=json.loads) as loads,
+            ):
+                self.assertEqual(store._claude_titles()["cli-id"]["title"], "Visible title")
+                store._claude_title_cache_at = 0
+                self.assertEqual(store._claude_titles()["cli-id"]["title"], "Visible title")
+            self.assertEqual(loads.call_count, 1)
+
+    def test_claude_metadata_cache_removes_deleted_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            metadata = (
+                home
+                / "Library/Application Support/Claude/claude-code-sessions"
+                / "account/project/local_session.json"
+            )
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text(json.dumps({"cliSessionId": "cli-id", "title": "Title"}))
+            store = StateStore()
+            with patch("codexbar_touchbar.core.Path.home", return_value=home):
+                self.assertIn("cli-id", store._claude_titles())
+                metadata.unlink()
+                store._claude_title_cache_at = 0
+                self.assertNotIn("cli-id", store._claude_titles())
+            self.assertEqual(store._claude_file_cache, {})
 
     def test_antigravity_presence_is_explicitly_app_level(self) -> None:
         store = StateStore()
