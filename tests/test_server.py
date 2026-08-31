@@ -44,6 +44,9 @@ class ServerTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
+    def setUp(self) -> None:
+        self.btt_tracker.record_success()
+
     def request(self, method: str, path: str, payload: object | None = None, content_type: str = "application/json", host: str | None = None):
         connection = HTTPConnection("127.0.0.1", self.port, timeout=2)
         body = json.dumps(payload).encode() if payload is not None else None
@@ -63,6 +66,12 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(body["ok"])
         self.assertTrue(body["bttUpdate"]["ok"])
         self.assertIsNone(body["lastAction"])
+
+    def test_btt_update_tracker_starts_pending(self) -> None:
+        pending = BttUpdateTracker().snapshot()
+        self.assertFalse(pending["ok"])
+        self.assertIsNone(pending["lastSuccessAt"])
+        self.assertIsNone(pending["errorType"])
 
     def test_health_reports_and_clears_btt_update_failure(self) -> None:
         self.btt_tracker.record_failure(subprocess.CalledProcessError(1, ["bttcli"]))

@@ -49,7 +49,7 @@ class BttUpdateTracker:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._value: dict[str, Any] = {
-            "ok": True,
+            "ok": False,
             "lastSuccessAt": None,
             "errorType": None,
         }
