@@ -6,7 +6,12 @@ INSTALL_ROOT="${CODEXBAR_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Suppor
 VENV="$INSTALL_ROOT/venv"
 BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
 
-if ! command -v codexbar >/dev/null 2>&1; then
+if [ -n "${CODEXBAR_TOUCHBAR_CODEXBAR:-}" ]; then
+  if [ ! -x "$CODEXBAR_TOUCHBAR_CODEXBAR" ]; then
+    echo "CODEXBAR_TOUCHBAR_CODEXBAR must point to an executable." >&2
+    exit 1
+  fi
+elif ! command -v codexbar >/dev/null 2>&1; then
   echo "codexbar is required: https://github.com/steipete/CodexBar" >&2
   exit 1
 fi

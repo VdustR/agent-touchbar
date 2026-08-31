@@ -63,9 +63,19 @@ def install_service() -> None:
 
 def uninstall_service() -> None:
     target = launch_agent_path()
-    if target.exists():
-        subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(target)], capture_output=True)
-        target.unlink()
+    result = subprocess.run(
+        ["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 and not any(
+        message in result.stderr
+        for message in ("Could not find specified service", "No such process")
+    ):
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
+    target.unlink(missing_ok=True)
 
 
 def doctor() -> int:
@@ -94,6 +104,8 @@ def doctor() -> int:
         bool(checks.get("betterTouchTool"))
         and bool(checks.get("launchAgent"))
         and not snapshot["errors"]["sessions"]
+        and "codex" not in snapshot["errors"]["usage"]
+        and "codex" in checks["usageProviders"]
         and "Required" not in str(checks["codexbar"])
     )
     print(json.dumps({"ok": ok, "checks": checks}, indent=2, ensure_ascii=False))
