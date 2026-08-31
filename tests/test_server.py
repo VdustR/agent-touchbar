@@ -75,9 +75,14 @@ class ServerTests(unittest.TestCase):
         self.assertIn("expired", body["error"])
 
     def test_rejects_non_loopback_host_header(self) -> None:
-        status, body = self.request("GET", "/api/state", host="attacker.example")
+        status, body = self.request("GET", "/api/btt", host="attacker.example")
         self.assertEqual(status, 400)
         self.assertIn("Host", body["error"])
+
+    def test_raw_state_endpoint_is_not_exposed(self) -> None:
+        status, body = self.request("GET", "/api/state")
+        self.assertEqual(status, 404)
+        self.assertEqual(body, {"error": "Not found"})
 
     def test_post_requires_json(self) -> None:
         status, body = self.request("POST", "/api/focus/session", {"id": "valid"}, "text/plain")

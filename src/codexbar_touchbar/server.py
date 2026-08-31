@@ -94,9 +94,7 @@ def handler_factory(
             if self.reject_untrusted_host():
                 return
             path = urlparse(self.path).path
-            if path == "/api/state":
-                self.send_json(store.snapshot())
-            elif path == "/api/btt":
+            if path == "/api/btt":
                 self.send_json(compact_snapshot(store.snapshot()))
             elif path == "/healthz":
                 snapshot = store.snapshot()
