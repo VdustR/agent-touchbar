@@ -28,10 +28,15 @@ def install_service() -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     log_dir = data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    executable = shutil.which("codexbar-touchbar") or sys.argv[0]
+    executable = shutil.which("codexbar-touchbar")
+    program_arguments = (
+        [str(Path(executable).resolve()), "serve"]
+        if executable
+        else [sys.executable, "-m", "codexbar_touchbar", "serve"]
+    )
     payload = {
         "Label": LABEL,
-        "ProgramArguments": [str(Path(executable).resolve()), "serve"],
+        "ProgramArguments": program_arguments,
         "RunAtLoad": True,
         "KeepAlive": True,
         "StandardOutPath": str(log_dir / "stdout.log"),
@@ -39,6 +44,7 @@ def install_service() -> None:
         "ProcessType": "Interactive",
         "EnvironmentVariables": {
             "CODEXBAR_TOUCHBAR_CODEXBAR": codexbar_path(),
+            "CODEXBAR_TOUCHBAR_DATA_DIR": str(data_dir()),
         },
     }
     target.write_bytes(plistlib.dumps(payload))
@@ -67,7 +73,12 @@ def doctor() -> int:
     checks["sessionCount"] = len(snapshot["sessions"])
     checks["usageProviders"] = [item.get("provider") for item in snapshot["usage"]]
     checks["errors"] = snapshot["errors"]
-    ok = bool(checks.get("betterTouchTool")) and not snapshot["errors"]["sessions"] and "Required" not in str(checks["codexbar"])
+    ok = (
+        bool(checks.get("betterTouchTool"))
+        and bool(checks.get("launchAgent"))
+        and not snapshot["errors"]["sessions"]
+        and "Required" not in str(checks["codexbar"])
+    )
     print(json.dumps({"ok": ok, "checks": checks}, indent=2, ensure_ascii=False))
     return 0 if ok else 1
 
@@ -76,9 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="codexbar-touchbar")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
-    serve_parser = commands.add_parser("serve")
-    serve_parser.add_argument("--host", default="127.0.0.1")
-    serve_parser.add_argument("--port", default=4317, type=int)
+    commands.add_parser("serve")
     install_parser = commands.add_parser("install")
     install_parser.add_argument("--session-slots", default=4, type=int)
     uninstall_parser = commands.add_parser("uninstall")
@@ -90,12 +99,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     if args.command == "serve":
-        serve(args.host, args.port)
+        serve("127.0.0.1", 4317)
     elif args.command == "install":
         icons = extract_icons()
-        install_service()
         for result in install_widgets(args.session_slots):
             print(result)
+        install_service()
         print(json.dumps({"icons": icons}))
     elif args.command == "uninstall":
         for name in uninstall_widgets(args.session_slots):

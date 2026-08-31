@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import threading
 import time
@@ -155,4 +156,10 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
             time.sleep(0.25)
 
     threading.Thread(target=update_loop, daemon=True, name="btt-buttons").start()
-    ThreadingHTTPServer((host, port), handler_factory(state)).serve_forever()
+    server_type = ThreadingHTTPServer
+    if host == "::1":
+        class IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+            address_family = socket.AF_INET6
+
+        server_type = IPv6ThreadingHTTPServer
+    server_type((host, port), handler_factory(state)).serve_forever()

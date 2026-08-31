@@ -64,6 +64,13 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(providers["codex"]["usage"]["primary"]["usedPercent"], 30)
         self.assertIn("claude", store.usage.error)
 
+    def test_usage_refresh_clears_successful_empty_provider(self) -> None:
+        store = StateStore()
+        store.usage.value = [{"provider": "claude", "usage": {}}]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=[]):
+            store._refresh_usage()
+        self.assertEqual(store.usage.value, [])
+
     def test_quota_windows_only_returns_reported_windows(self) -> None:
         provider = {
             "usage": {

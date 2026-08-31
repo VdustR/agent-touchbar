@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.btt import button_updates, definitions, install_widgets, session_action, session_script, update_buttons, widget_uuid
+from codexbar_touchbar.btt import button_updates, definitions, install_widgets, session_action, session_payload_action, session_script, uninstall_widgets, update_buttons, widget_uuid
 
 
 class BetterTouchToolTests(unittest.TestCase):
@@ -97,6 +97,12 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertIn("os.replace", render)
         self.assertNotIn("/api/btt", action)
 
+    def test_session_payload_action_shell_quotes_opaque_id(self) -> None:
+        action = session_payload_action("thread'$(touch /tmp/nope)")
+        result = subprocess.run(["/bin/bash", "-n", "-c", action], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("'\"'\"'", action)
+
     @patch("codexbar_touchbar.btt.data_dir", return_value=Path("/tmp/Application Support/Test"))
     def test_session_render_path_with_spaces_is_valid_python(self, _data_dir) -> None:
         script = session_script(0)
@@ -136,6 +142,15 @@ class BetterTouchToolTests(unittest.TestCase):
             self.assertEqual(calls.count("add_new_trigger"), 4)
             self.assertGreaterEqual(calls.count("delete_trigger"), 4)
             self.assertNotIn("update_trigger", calls)
+
+    def test_uninstall_fails_when_trigger_lookup_fails(self) -> None:
+        with patch("codexbar_touchbar.btt.run_cli") as run_cli:
+            run_cli.return_value.returncode = 1
+            run_cli.return_value.args = ["bttcli", "get_trigger"]
+            run_cli.return_value.stdout = ""
+            run_cli.return_value.stderr = "socket unavailable"
+            with self.assertRaises(subprocess.CalledProcessError):
+                uninstall_widgets(1)
 
 
 if __name__ == "__main__":

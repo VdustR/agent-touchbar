@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.cli import install_service
+from codexbar_touchbar.cli import doctor, install_service, main
 
 
 class CliTests(unittest.TestCase):
@@ -26,6 +26,52 @@ class CliTests(unittest.TestCase):
                 payload["EnvironmentVariables"]["CODEXBAR_TOUCHBAR_CODEXBAR"],
                 "/custom/bin/codexbar",
             )
+            self.assertEqual(
+                payload["EnvironmentVariables"]["CODEXBAR_TOUCHBAR_DATA_DIR"],
+                temporary,
+            )
+
+    @patch("codexbar_touchbar.cli.subprocess.run")
+    @patch("codexbar_touchbar.cli.shutil.which", return_value=None)
+    @patch("codexbar_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
+    def test_module_install_preserves_python_interpreter(self, _codexbar, _which, _run) -> None:
+        with TemporaryDirectory() as temporary:
+            plist = Path(temporary) / "agent.plist"
+            with (
+                patch("codexbar_touchbar.cli.launch_agent_path", return_value=plist),
+                patch("codexbar_touchbar.cli.data_dir", return_value=Path(temporary)),
+                patch("codexbar_touchbar.cli.sys.executable", "/custom/bin/python"),
+            ):
+                install_service()
+            payload = plistlib.loads(plist.read_bytes())
+            self.assertEqual(
+                payload["ProgramArguments"],
+                ["/custom/bin/python", "-m", "codexbar_touchbar", "serve"],
+            )
+
+    def test_install_replaces_widgets_before_starting_service(self) -> None:
+        events = []
+        with (
+            patch("codexbar_touchbar.cli.install_service", side_effect=lambda: events.append("service")),
+            patch("codexbar_touchbar.cli.install_widgets", side_effect=lambda _: events.append("widgets") or []),
+            patch("codexbar_touchbar.cli.extract_icons", return_value={}),
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            parser.return_value.parse_args.return_value.command = "install"
+            parser.return_value.parse_args.return_value.session_slots = 4
+            main()
+        self.assertEqual(events, ["widgets", "service"])
+
+    def test_doctor_requires_launch_agent(self) -> None:
+        snapshot = {"sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}
+        with (
+            patch("codexbar_touchbar.cli.codexbar_path", return_value="/bin/codexbar"),
+            patch("codexbar_touchbar.cli.launch_agent_path", return_value=Path("/missing")),
+            patch("codexbar_touchbar.cli.Path.is_dir", return_value=True),
+            patch("codexbar_touchbar.cli.StateStore") as store_type,
+        ):
+            store_type.return_value.snapshot.return_value = snapshot
+            self.assertEqual(doctor(), 1)
 
 
 if __name__ == "__main__":

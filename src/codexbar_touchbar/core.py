@@ -134,9 +134,9 @@ class StateStore:
                 errors[provider] = str(caught)
         with self.lock:
             self.usage.value = [
-                current.get(provider) or previous[provider]
+                current[provider] if provider in current else previous[provider]
                 for provider in PROVIDERS
-                if provider in current or provider in previous
+                if provider in current or (provider in errors and provider in previous)
             ]
             self.usage.error = errors
             self.usage.updated_at = time.time()

@@ -222,7 +222,7 @@ def session_action(index: int) -> str:
 
 def session_payload_action(session_id: str) -> str:
     payload = json.dumps({"id": session_id}, separators=(",", ":"))
-    return f"/usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data '{payload}' {BASE_URL}/api/focus/session >/dev/null"
+    return f"/usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data {shlex.quote(payload)} {BASE_URL}/api/focus/session >/dev/null"
 
 
 def definitions(session_slots: int = 4) -> list[dict]:
@@ -279,7 +279,12 @@ def uninstall_widgets(session_slots: int = 4) -> list[str]:
     removed = []
     for name in names:
         trigger_id = widget_uuid(name)
-        existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+        lookup = run_cli("get_trigger", f"uuid={trigger_id}", check=False)
+        if lookup.returncode != 0:
+            raise subprocess.CalledProcessError(
+                lookup.returncode, lookup.args, lookup.stdout, lookup.stderr
+            )
+        existing = lookup.stdout.strip()
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={trigger_id}")
             removed.append(name)
