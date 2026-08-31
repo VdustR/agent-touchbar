@@ -79,6 +79,18 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(body["bttUpdate"]["ok"])
         self.assertIsNone(body["bttUpdate"]["errorType"])
 
+    def test_health_uses_one_btt_update_snapshot(self) -> None:
+        stable = {"ok": True, "lastSuccessAt": "now", "errorType": None}
+        contradictory = {"ok": False, "lastSuccessAt": "now", "errorType": "RuntimeError"}
+        with patch.object(
+            self.btt_tracker, "snapshot", side_effect=[stable, contradictory]
+        ) as snapshot:
+            status, body = self.request("GET", "/healthz")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["bttUpdate"], stable)
+        snapshot.assert_called_once_with()
+
     def test_health_requires_codex_usage(self) -> None:
         self.store.include_usage = False
         try:
