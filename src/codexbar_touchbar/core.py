@@ -109,7 +109,7 @@ class StateStore:
                 self.sessions.value = value
                 self.session_counts = counts
             self.sessions.error = error
-            self.sessions.updated_at = time.time()
+            self.sessions.updated_at = time.monotonic()
             self.sessions.refreshing = False
 
     def _refresh_usage(self) -> None:
@@ -142,9 +142,12 @@ class StateStore:
                             published[item] for item in PROVIDERS if item in published
                         ]
                         self.usage.error = dict(errors)
-                        self.usage.updated_at = time.time()
+                        self.usage.updated_at = time.monotonic()
             except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
                 errors[provider] = str(caught)
+                with self.lock:
+                    self.usage.error = dict(errors)
+                    self.usage.updated_at = time.monotonic()
         with self.lock:
             self.usage.value = [
                 current[provider] if provider in current else previous[provider]
@@ -152,12 +155,12 @@ class StateStore:
                 if provider in current or (provider in errors and provider in previous)
             ]
             self.usage.error = errors
-            self.usage.updated_at = time.time()
+            self.usage.updated_at = time.monotonic()
             self.usage.refreshing = False
 
     def _start_if_stale(self, cache: Cache, ttl: float, target: Any, name: str) -> None:
         with self.lock:
-            if time.time() - cache.updated_at < ttl or cache.refreshing:
+            if time.monotonic() - cache.updated_at < ttl or cache.refreshing:
                 return
             cache.refreshing = True
         threading.Thread(target=target, daemon=True, name=name).start()

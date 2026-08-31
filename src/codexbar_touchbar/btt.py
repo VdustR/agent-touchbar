@@ -25,7 +25,12 @@ def bttcli_path() -> str:
 
 
 def data_dir() -> Path:
-    return Path(os.environ.get("CODEXBAR_TOUCHBAR_DATA_DIR", Path.home() / "Library/Application Support/CodexBarTouchBar"))
+    return Path(
+        os.environ.get(
+            "CODEXBAR_TOUCHBAR_DATA_DIR",
+            Path.home() / "Library/Application Support/CodexBarTouchBar",
+        )
+    ).expanduser().resolve()
 
 
 def widget_uuid(name: str) -> str:

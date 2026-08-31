@@ -85,6 +85,21 @@ class CoreTests(unittest.TestCase):
             store._refresh_usage()
         self.assertEqual(store.usage.value[0]["provider"], "codex")
 
+    def test_usage_refresh_publishes_codex_error_before_optional_providers(self) -> None:
+        store = StateStore()
+        store.usage.value = [{"provider": "codex", "usage": {}}]
+
+        def response(*args, **kwargs):
+            provider = args[2]
+            if provider == "codex":
+                raise OSError("codex unavailable")
+            self.assertIn("codex", store.usage.error)
+            return []
+
+        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+            store._refresh_usage()
+        self.assertIn("codex", store.usage.error)
+
     def test_quota_windows_only_returns_reported_windows(self) -> None:
         provider = {
             "usage": {
