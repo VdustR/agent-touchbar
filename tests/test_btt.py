@@ -12,6 +12,20 @@ from codexbar_touchbar.btt import button_updates, definitions, install_widgets, 
 
 
 class BetterTouchToolTests(unittest.TestCase):
+    @patch("codexbar_touchbar.btt.bttcli_path", return_value="/bin/bttcli")
+    @patch("codexbar_touchbar.btt.subprocess.run")
+    def test_run_cli_has_a_bounded_timeout(self, run, _path) -> None:
+        from codexbar_touchbar.btt import BTT_CLI_TIMEOUT_SECONDS, run_cli
+
+        run_cli("get_trigger", "uuid=test", check=False)
+        run.assert_called_once_with(
+            ["/bin/bttcli", "get_trigger", "uuid=test"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=BTT_CLI_TIMEOUT_SECONDS,
+        )
+
     def test_definitions_have_stable_unique_ids_and_widget_native_actions(self) -> None:
         widgets = definitions()
         identifiers = [item["BTTUUID"] for item in widgets]
@@ -156,6 +170,19 @@ class BetterTouchToolTests(unittest.TestCase):
         ]
         self.assertEqual(commands, ["get_trigger", "delete_trigger", "add_new_trigger"])
         persist.assert_called_once_with(0, "new")
+
+    @patch("codexbar_touchbar.btt.persist_session_action")
+    @patch("codexbar_touchbar.btt.run_cli")
+    def test_failed_session_lookup_retains_previous_tap_target(self, run_cli, persist) -> None:
+        run_cli.return_value = subprocess.CompletedProcess(
+            ["bttcli", "get_trigger"], 1, "", "socket unavailable"
+        )
+        snapshot = {"usage": [], "sessions": [
+            {"id": "new", "provider": "codex", "state": "active", "source": "desktopApp"}
+        ]}
+        with self.assertRaises(subprocess.CalledProcessError):
+            update_buttons(snapshot, 1, {widget_uuid("Agent session 1"): {"old": True}})
+        persist.assert_not_called()
 
     def test_cli_sessions_are_not_rendered_as_desktop_buttons(self) -> None:
         snapshot = {

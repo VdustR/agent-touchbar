@@ -95,6 +95,9 @@ class StateStore:
         self.usage = Cache([], error={})
         self._claude_title_cache: dict[str, dict[str, str]] = {}
         self._claude_title_cache_at = 0.0
+        self._claude_file_cache: dict[
+            Path, tuple[int, int, str, dict[str, str]]
+        ] = {}
 
     def _refresh_sessions(self) -> None:
         counts: dict[str, dict[str, int]] = {}
@@ -156,18 +159,39 @@ class StateStore:
             return self._claude_title_cache
         root = Path.home() / "Library/Application Support/Claude/claude-code-sessions"
         result: dict[str, dict[str, str]] = {}
+        current_paths: set[Path] = set()
         for path in root.glob("*/*/*.json"):
+            current_paths.add(path)
             try:
+                stat = path.stat()
+                fingerprint = (stat.st_mtime_ns, stat.st_size)
+                cached = self._claude_file_cache.get(path)
+                if cached and cached[:2] == fingerprint:
+                    cli_session_id, metadata = cached[2], cached[3]
+                    result[cli_session_id] = metadata
+                    continue
                 item = json.loads(path.read_text())
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                self._claude_file_cache.pop(path, None)
                 continue
             if not isinstance(item, dict) or not isinstance(item.get("cliSessionId"), str):
+                self._claude_file_cache.pop(path, None)
                 continue
-            result[item["cliSessionId"]] = {
+            metadata = {
                 key: value
                 for key in ("title", "sessionId")
                 if isinstance((value := item.get(key)), str) and value
             }
+            cli_session_id = item["cliSessionId"]
+            result[cli_session_id] = metadata
+            self._claude_file_cache[path] = (
+                fingerprint[0], fingerprint[1], cli_session_id, metadata
+            )
+        self._claude_file_cache = {
+            path: item
+            for path, item in self._claude_file_cache.items()
+            if path in current_paths
+        }
         self._claude_title_cache = result
         self._claude_title_cache_at = now
         return result

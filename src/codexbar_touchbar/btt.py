@@ -16,6 +16,7 @@ from .core import ATTENTION_STATES, APP_NAMES, PROVIDERS, find_executable, quota
 
 NAMESPACE = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
 BASE_URL = "http://127.0.0.1:4317"
+BTT_CLI_TIMEOUT_SECONDS = 5.0
 
 
 def bttcli_path() -> str:
@@ -194,16 +195,23 @@ def update_buttons(
             if trigger_id in session_ids
             else None
         )
-        if session_index is not None:
+        changed = previous is None or previous.get(trigger_id) != payload
+        if session_index is not None and not changed:
+            # The visible presentation is unchanged, so swapping only the
+            # opaque target keeps the label and action semantically aligned.
             persist_session_action(session_index, sessions[session_index]["id"])
-        if previous is None or previous.get(trigger_id) != payload:
+        if changed:
             if session_index is not None:
                 existing = trigger_payload(trigger_id)
                 if existing not in {"", "null", "{}", "[]"}:
                     # Partial update_trigger payloads are interpreted as generic
                     # mouse triggers by BTT 6.x. Replace the full Touch Bar
-                    # definition atomically whenever session identity changes.
+                    # definition whenever the rendered presentation changes.
                     run_cli("delete_trigger", f"uuid={trigger_id}")
+                # Do not swap the target while an old presentation can still
+                # be tapped. After deletion succeeds, a failed add leaves no
+                # misleading trigger and the update loop retries the full add.
+                persist_session_action(session_index, sessions[session_index]["id"])
                 definition = session_definition(session_index)
                 definition.update(payload)
                 definition["BTTTriggerConfig"] = {
@@ -324,7 +332,13 @@ def definitions(session_slots: int = 4) -> list[dict]:
 
 
 def run_cli(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([bttcli_path(), *args], check=check, capture_output=True, text=True)
+    return subprocess.run(
+        [bttcli_path(), *args],
+        check=check,
+        capture_output=True,
+        text=True,
+        timeout=BTT_CLI_TIMEOUT_SECONDS,
+    )
 
 
 def install_widgets(session_slots: int = 4) -> list[str]:
