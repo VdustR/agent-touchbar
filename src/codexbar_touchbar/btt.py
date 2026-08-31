@@ -303,7 +303,7 @@ def install_widgets(session_slots: int = 4) -> list[str]:
     results = []
     for definition in definitions(session_slots):
         trigger_id = definition["BTTUUID"]
-        existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+        existing = trigger_payload(trigger_id)
         payload = json.dumps(definition, ensure_ascii=False, separators=(",", ":"))
         if existing not in {"", "null", "{}", "[]"}:
             # BTT merges action arrays during update_trigger, which can leave a
@@ -314,13 +314,13 @@ def install_widgets(session_slots: int = 4) -> list[str]:
     for index in range(12):
         name = f"Agent session {index + 1}"
         trigger_id = widget_uuid(name)
-        existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+        existing = trigger_payload(trigger_id)
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={trigger_id}")
             results.append(f"delete_trigger: {name}")
     for legacy_name in ("Attention session", "Agent usage"):
         legacy_id = widget_uuid(legacy_name)
-        existing = run_cli("get_trigger", f"uuid={legacy_id}", check=False).stdout.strip()
+        existing = trigger_payload(legacy_id)
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={legacy_id}")
             results.append(f"delete_trigger: {legacy_name}")

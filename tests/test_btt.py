@@ -229,6 +229,7 @@ class BetterTouchToolTests(unittest.TestCase):
                 patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
                 patch("codexbar_touchbar.btt.run_cli") as run_cli,
             ):
+                run_cli.return_value.returncode = 0
                 run_cli.return_value.stdout = '{"BTTUUID":"existing"}'
                 install_widgets(2)
             deleted = {
@@ -246,6 +247,7 @@ class BetterTouchToolTests(unittest.TestCase):
                 patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
                 patch("codexbar_touchbar.btt.run_cli") as run_cli,
             ):
+                run_cli.return_value.returncode = 0
                 run_cli.return_value.stdout = '{"BTTUUID":"existing"}'
                 install_widgets(1)
             calls = [call.args[0] for call in run_cli.call_args_list if call.args]
@@ -314,6 +316,26 @@ class BetterTouchToolTests(unittest.TestCase):
                     if args == ("delete_trigger", f"uuid={widget_uuid('Agent session 5')}"):
                         raise subprocess.CalledProcessError(1, ["bttcli", *args])
                     return subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
+
+                run_cli.side_effect = response
+                with self.assertRaises(subprocess.CalledProcessError):
+                    install_widgets(4)
+
+    def test_install_retries_after_excess_slot_lookup_failure(self) -> None:
+        with TemporaryDirectory() as temporary:
+            with (
+                patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
+                patch("codexbar_touchbar.btt.run_cli") as run_cli,
+            ):
+                def response(*args, **kwargs):
+                    if args == (
+                        "get_trigger",
+                        f"uuid={widget_uuid('Agent session 5')}",
+                    ):
+                        return subprocess.CompletedProcess(
+                            ["bttcli", *args], 1, "", "socket unavailable"
+                        )
+                    return subprocess.CompletedProcess(["bttcli", *args], 0, "{}", "")
 
                 run_cli.side_effect = response
                 with self.assertRaises(subprocess.CalledProcessError):
