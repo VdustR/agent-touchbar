@@ -29,9 +29,11 @@ Project-name fallbacks are prefixed with `⌁` so they are not presented as
 conversation titles.
 
 Tapping a usage item opens or focuses its desktop application. Tapping a
-desktop session validates the cached CodexBar identity and immediately
-activates the owning desktop application. Neither CodexBar nor the desktop apps
-currently expose navigation to a specific conversation through this interface.
+Codex desktop session opens its exact `codex://threads/<id>` deep link. Claude
+Code currently exposes no supported deep link for focusing an existing native
+Desktop session, so Claude buttons activate the app without switching its
+selected session. The unsafe `claude://resume` workaround is intentionally not
+used because it duplicates native sessions.
 
 ## Requirements
 

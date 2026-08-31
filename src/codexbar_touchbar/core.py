@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 PROVIDERS = ("codex", "claude", "antigravity")
 APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity"}
@@ -211,6 +212,13 @@ class StateStore:
         if session is None:
             raise ValueError("Unknown or expired session id")
         provider = session.get("provider")
+        if session.get("source") == "desktopApp" and provider == "codex":
+            subprocess.run(
+                ["/usr/bin/open", f"codex://threads/{quote(session_id, safe='')}"],
+                check=True,
+                timeout=3,
+            )
+            return
         if session.get("source") == "desktopApp" and provider in BUNDLE_IDS:
             subprocess.run(
                 ["/usr/bin/open", "-b", BUNDLE_IDS[provider]], check=True, timeout=3

@@ -26,6 +26,17 @@ class CoreTests(unittest.TestCase):
             timeout=3,
         )
 
+    @patch("codexbar_touchbar.core.subprocess.run")
+    def test_codex_session_focus_uses_thread_deep_link(self, run) -> None:
+        store = StateStore()
+        store.sessions.value = [
+            {"id": "thread/id", "provider": "codex", "source": "desktopApp"}
+        ]
+        store.focus_session("thread/id")
+        run.assert_called_once_with(
+            ["/usr/bin/open", "codex://threads/thread%2Fid"], check=True, timeout=3
+        )
+
     def test_claude_title_enrichment_reads_only_matching_title_metadata(self) -> None:
         with TemporaryDirectory() as temporary:
             transcript = Path(temporary) / "session.jsonl"
