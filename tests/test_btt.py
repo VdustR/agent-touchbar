@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 import subprocess
 from pathlib import Path
@@ -21,11 +22,14 @@ class BetterTouchToolTests(unittest.TestCase):
             self.assertNotIn("BTTActionsToExecute", item)
             self.assertNotIn("BTTActionCategoryTouchRelease", item)
 
-    def test_layout_places_quota_before_sessions(self) -> None:
-        widgets = definitions()
-        quota_orders = [item["BTTOrder"] for item in widgets[:3]]
-        session_orders = [item["BTTOrder"] for item in widgets[3:]]
-        self.assertLess(max(quota_orders), min(session_orders))
+    def test_attention_sessions_sort_before_quota_and_active_after(self) -> None:
+        snapshot = {"usage": [], "sessions": [
+            {"id": "attention", "provider": "codex", "source": "desktopApp", "state": "needs_input"},
+            {"id": "active", "provider": "claude", "source": "desktopApp", "state": "active"},
+        ]}
+        updates = dict(button_updates(snapshot, 2))
+        self.assertLess(updates[widget_uuid("Agent session 1")]["BTTOrder"], 10)
+        self.assertGreater(updates[widget_uuid("Agent session 2")]["BTTOrder"], 12)
 
     def test_native_button_updates_bind_visible_session_identity(self) -> None:
         snapshot = {
@@ -35,10 +39,9 @@ class BetterTouchToolTests(unittest.TestCase):
         updates = dict(button_updates(snapshot, 2))
         quota = updates[widget_uuid("Codex usage")]
         session = updates[widget_uuid("Agent session 1")]
-        empty = updates[widget_uuid("Agent session 2")]
         self.assertEqual(quota["BTTTouchBarButtonName"], "7d 75%")
         self.assertIn('session-1', session["BTTTerminalCommand"])
-        self.assertFalse(empty["BTTEnabled"])
+        self.assertNotIn(widget_uuid("Agent session 2"), updates)
 
     def test_quota_button_appends_only_observed_nonzero_session_states(self) -> None:
         snapshot = {
@@ -67,6 +70,38 @@ class BetterTouchToolTests(unittest.TestCase):
         update_buttons(snapshot, 2, previous)
         self.assertEqual(run_cli.call_count, first_count)
 
+    @patch("codexbar_touchbar.btt.run_cli")
+    def test_dynamic_session_trigger_is_created_and_removed(self, run_cli) -> None:
+        run_cli.return_value = subprocess.CompletedProcess([], 0, "{}", "")
+        active = {"usage": [], "sessions": [
+            {"id": "one", "provider": "codex", "state": "active", "source": "desktopApp"}
+        ]}
+        previous = update_buttons(active, 2, {})
+        added = [call for call in run_cli.call_args_list if call.args[0] == "add_new_trigger"]
+        self.assertEqual(len(added), 1)
+        added_payload = json.loads(added[0].args[1].removeprefix("json="))
+        self.assertEqual(added_payload["BTTTouchBarButtonName"], "● session")
+        self.assertIn("one", added_payload["BTTTerminalCommand"])
+        run_cli.reset_mock()
+        run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
+        update_buttons({"usage": [], "sessions": []}, 2, previous)
+        deleted = [call.args[1] for call in run_cli.call_args_list if call.args[0] == "delete_trigger"]
+        self.assertEqual(deleted, [f"uuid={widget_uuid('Agent session 1')}"])
+
+    @patch("codexbar_touchbar.btt.run_cli")
+    def test_changed_session_trigger_is_fully_replaced(self, run_cli) -> None:
+        run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
+        snapshot = {"usage": [], "sessions": [
+            {"id": "new", "provider": "codex", "state": "active", "source": "desktopApp"}
+        ]}
+        update_buttons(snapshot, 1, {widget_uuid("Agent session 1"): {"old": True}})
+        commands = [
+            call.args[0]
+            for call in run_cli.call_args_list
+            if call.args[0] != "update_trigger"
+        ]
+        self.assertEqual(commands, ["get_trigger", "delete_trigger", "add_new_trigger"])
+
     def test_cli_sessions_are_not_rendered_as_desktop_buttons(self) -> None:
         snapshot = {
             "usage": [],
@@ -81,7 +116,7 @@ class BetterTouchToolTests(unittest.TestCase):
             "○ ⌁ Project",
         )
 
-    def test_non_codex_sessions_are_not_rendered(self) -> None:
+    def test_sessions_without_supported_states_are_not_rendered(self) -> None:
         snapshot = {
             "usage": [],
             "sessions": [
@@ -90,7 +125,7 @@ class BetterTouchToolTests(unittest.TestCase):
             ],
         }
         updates = dict(button_updates(snapshot, 1))
-        self.assertFalse(updates[widget_uuid("Agent session 1")]["BTTEnabled"])
+        self.assertNotIn(widget_uuid("Agent session 1"), updates)
 
     def test_unsupported_codex_session_state_is_not_rendered_as_idle(self) -> None:
         snapshot = {
@@ -100,7 +135,7 @@ class BetterTouchToolTests(unittest.TestCase):
             ],
         }
         updates = dict(button_updates(snapshot, 1))
-        self.assertFalse(updates[widget_uuid("Agent session 1")]["BTTEnabled"])
+        self.assertNotIn(widget_uuid("Agent session 1"), updates)
 
     def test_non_string_session_labels_fall_back_safely(self) -> None:
         snapshot = {
@@ -131,6 +166,12 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertIn("os.replace", render)
         self.assertNotIn("/api/btt", action)
 
+    def test_session_render_preserves_attention_visuals_during_refresh(self) -> None:
+        render = session_script(0)
+        self.assertIn('dot="!" if attention', render)
+        self.assertIn('bg="112, 35, 42, 255" if attention', render)
+        self.assertIn("approval_required", render)
+
     def test_session_payload_action_shell_quotes_opaque_id(self) -> None:
         action = session_payload_action("thread'$(touch /tmp/nope)")
         result = subprocess.run(["/bin/bash", "-n", "-c", action], capture_output=True, text=True)
@@ -154,7 +195,7 @@ class BetterTouchToolTests(unittest.TestCase):
                 patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
                 patch("codexbar_touchbar.btt.run_cli") as run_cli,
             ):
-                run_cli.return_value.stdout = "{}"
+                run_cli.return_value.stdout = '{"BTTUUID":"existing"}'
                 install_widgets(2)
             deleted = {
                 call.args[1]
@@ -174,7 +215,7 @@ class BetterTouchToolTests(unittest.TestCase):
                 run_cli.return_value.stdout = '{"BTTUUID":"existing"}'
                 install_widgets(1)
             calls = [call.args[0] for call in run_cli.call_args_list if call.args]
-            self.assertEqual(calls.count("add_new_trigger"), 4)
+            self.assertEqual(calls.count("add_new_trigger"), 3)
             self.assertGreaterEqual(calls.count("delete_trigger"), 4)
             self.assertNotIn("update_trigger", calls)
 
@@ -238,7 +279,7 @@ class BetterTouchToolTests(unittest.TestCase):
                 def response(*args, **kwargs):
                     if args == ("delete_trigger", f"uuid={widget_uuid('Agent session 5')}"):
                         raise subprocess.CalledProcessError(1, ["bttcli", *args])
-                    return subprocess.CompletedProcess([], 0, "{}", "")
+                    return subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
 
                 run_cli.side_effect = response
                 with self.assertRaises(subprocess.CalledProcessError):

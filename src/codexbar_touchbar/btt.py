@@ -11,7 +11,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from .core import APP_NAMES, PROVIDERS, find_executable, quota_windows
+from .core import ATTENTION_STATES, APP_NAMES, PROVIDERS, find_executable, quota_windows
 
 NAMESPACE = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
 BASE_URL = "http://127.0.0.1:4317"
@@ -135,15 +135,18 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
     sessions = [
         item
         for item in snapshot.get("sessions", [])
-        if item.get("provider") == "codex"
-        and item.get("source") == "desktopApp"
-        and item.get("state") in {"active", "idle"}
+        if item.get("provider") in PROVIDERS
+        and item.get("state") in ATTENTION_STATES | {"active", "idle", "available"}
+        and (
+            item.get("source") == "desktopApp"
+            or (item.get("provider") == "antigravity" and item.get("source") == "appPresence")
+        )
     ]
-    for index in range(session_slots):
-        item = sessions[index] if index < len(sessions) else None
-        payload: dict = {"BTTEnabled": bool(item)}
+    for index, item in enumerate(sessions[:session_slots]):
+        payload: dict = {"BTTEnabled": True}
         if item:
             active = item.get("state") == "active"
+            attention = item.get("state") in ATTENTION_STATES
             session_name = item.get("sessionName")
             project_name = item.get("projectName")
             if isinstance(session_name, str) and session_name:
@@ -153,9 +156,10 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
             else:
                 name = "session"
             payload.update({
-                "BTTTouchBarButtonName": f"{'●' if active else '○'} {name[:16]}",
+                "BTTTouchBarButtonName": f"{'!' if attention else ('●' if active else '○')} {name[:16]}",
                 "BTTTerminalCommand": session_payload_action(item["id"]),
-                "BTTTriggerConfig": {"BTTTouchBarButtonColor": "27, 75, 61, 255" if active else "27, 32, 40, 255"},
+                "BTTOrder": index if attention else 20 + index,
+                "BTTTriggerConfig": {"BTTTouchBarButtonColor": "112, 35, 42, 255" if attention else ("27, 75, 61, 255" if active else "27, 32, 40, 255")},
             })
             encoded_icon = icon_data(item.get("provider", ""))
             if encoded_icon:
@@ -172,14 +176,43 @@ def update_buttons(
     snapshot: dict, session_slots: int = 4, previous: dict[str, dict] | None = None
 ) -> dict[str, dict]:
     current = dict(button_updates(snapshot, session_slots))
+    session_ids = {widget_uuid(f"Agent session {index + 1}") for index in range(session_slots)}
+    for index in range(session_slots):
+        trigger_id = widget_uuid(f"Agent session {index + 1}")
+        if trigger_id not in current and (previous is None or trigger_id in previous):
+            existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+            if existing not in {"", "null", "{}", "[]"}:
+                run_cli("delete_trigger", f"uuid={trigger_id}")
     for trigger_id, payload in current.items():
         if previous is None or previous.get(trigger_id) != payload:
+            if trigger_id in session_ids:
+                existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+                if existing not in {"", "null", "{}", "[]"}:
+                    # Partial update_trigger payloads are interpreted as generic
+                    # mouse triggers by BTT 6.x. Replace the full Touch Bar
+                    # definition atomically whenever session identity changes.
+                    run_cli("delete_trigger", f"uuid={trigger_id}")
+                index = next(i for i in range(session_slots) if widget_uuid(f"Agent session {i + 1}") == trigger_id)
+                definition = session_definition(index)
+                definition.update(payload)
+                definition["BTTTriggerConfig"] = {
+                    **session_definition(index)["BTTTriggerConfig"],
+                    **payload.get("BTTTriggerConfig", {}),
+                }
+                run_cli("add_new_trigger", f"json={json.dumps(definition, ensure_ascii=False, separators=(',', ':'))}")
+                continue
             run_cli(
                 "update_trigger",
                 f"uuid={trigger_id}",
                 f"json={json.dumps(payload, separators=(',', ':'))}",
             )
     return current
+
+
+def session_definition(index: int) -> dict:
+    return widget(
+        f"Agent session {index + 1}", session_script(index), session_action(index), 132, 20 + index, 2.5
+    )
 
 
 def quota_script(provider: str) -> str:
@@ -223,9 +256,9 @@ if not x:
 else:
  os.makedirs(os.path.dirname(action_path),exist_ok=True)
  temporary=action_path+".tmp"; open(temporary,"w").write(json.dumps({{"id":x["id"]}})); os.replace(temporary,action_path)
- state=x.get("state") or "idle"; dot="●" if state=="active" else "○"
+ state=x.get("state") or "idle"; attention=state in {sorted(ATTENTION_STATES)!r}; dot="!" if attention else ("●" if state=="active" else "○")
  name=x.get("sessionName") or x.get("projectName") or "session"; provider=x.get("provider") or "agent"
- bg="27, 75, 61, 255" if state=="active" else "27, 32, 40, 255"; fg="230, 250, 242, 255" if state=="active" else "190, 201, 214, 255"
+ bg="112, 35, 42, 255" if attention else ("27, 75, 61, 255" if state=="active" else "27, 32, 40, 255"); fg="255, 236, 238, 255" if attention else ("230, 250, 242, 255" if state=="active" else "190, 201, 214, 255")
  icon="{data_dir()}/icons/"+provider+".png"
  result={{"text":f"{{dot}} {{name[:16]}}","background_color":bg,"font_color":fg,"font_size":11}}
  if os.path.isfile(icon): result["icon_path"]=icon
@@ -249,10 +282,6 @@ def definitions(session_slots: int = 4) -> list[dict]:
         widget(f"{provider.title()} usage", quota_script(provider), provider_action(provider), 172, 10 + index, 30)
         for index, provider in enumerate(PROVIDERS)
     ]
-    result.extend(
-        widget(f"Agent session {index + 1}", session_script(index), session_action(index), 132, 20 + index, 2.5)
-        for index in range(session_slots)
-    )
     return result
 
 
@@ -273,6 +302,13 @@ def install_widgets(session_slots: int = 4) -> list[str]:
             run_cli("delete_trigger", f"uuid={trigger_id}")
         run_cli("add_new_trigger", f"json={payload}")
         results.append(f"replace_trigger: {definition['BTTTouchBarButtonName']}")
+    for index in range(12):
+        name = f"Agent session {index + 1}"
+        trigger_id = widget_uuid(name)
+        existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+        if existing not in {"", "null", "{}", "[]"}:
+            run_cli("delete_trigger", f"uuid={trigger_id}")
+            results.append(f"delete_trigger: {name}")
     for legacy_name in ("Attention session", "Agent usage"):
         legacy_id = widget_uuid(legacy_name)
         existing = run_cli("get_trigger", f"uuid={legacy_id}", check=False).stdout.strip()
@@ -280,10 +316,6 @@ def install_widgets(session_slots: int = 4) -> list[str]:
             run_cli("delete_trigger", f"uuid={legacy_id}")
             results.append(f"delete_trigger: {legacy_name}")
     run_cli("delete_trigger", "uuid=E4F85058-56B7-4DBD-9064-3C26F11B8C52")
-    for index in range(session_slots, 12):
-        name = f"Agent session {index + 1}"
-        run_cli("delete_trigger", f"uuid={widget_uuid(name)}")
-        results.append(f"delete_trigger: {name}")
     slot_state_path().parent.mkdir(parents=True, exist_ok=True)
     slot_state_path().write_text(json.dumps({"sessionSlots": session_slots}) + "\n")
     return results

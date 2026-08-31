@@ -37,27 +37,27 @@ class CoreTests(unittest.TestCase):
     def test_session_refresh_keeps_only_codex_sessions(self) -> None:
         store = StateStore()
         sessions = [
-            {"id": "codex", "provider": "codex", "state": "active"},
+            {"id": "codex", "provider": "codex", "state": "active", "source": "desktopApp"},
             {"id": "claude", "provider": "claude"},
             {"id": "antigravity", "provider": "antigravity"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_app_is_running", return_value=False):
             store._refresh_sessions()
         self.assertEqual(
             store.sessions.value,
-            [{"id": "codex", "provider": "codex", "state": "active"}],
+            [{"id": "codex", "provider": "codex", "state": "active", "source": "desktopApp"}],
         )
 
     def test_session_refresh_rejects_codex_sessions_without_string_ids(self) -> None:
         store = StateStore()
         sessions = [
-            {"provider": "codex", "state": "active"},
-            {"id": None, "provider": "codex", "state": "idle"},
-            {"id": "valid", "provider": "codex", "state": "active"},
+            {"provider": "codex", "state": "active", "source": "desktopApp"},
+            {"id": None, "provider": "codex", "state": "idle", "source": "desktopApp"},
+            {"id": "valid", "provider": "codex", "state": "active", "source": "desktopApp"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_app_is_running", return_value=False):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value, [{"id": "valid", "provider": "codex", "state": "active"}])
+        self.assertEqual(store.sessions.value, [{"id": "valid", "provider": "codex", "state": "active", "source": "desktopApp"}])
 
     def test_session_refresh_rejects_non_list_payload(self) -> None:
         store = StateStore()
@@ -82,10 +82,10 @@ class CoreTests(unittest.TestCase):
     def test_session_refresh_ignores_non_string_states(self) -> None:
         store = StateStore()
         sessions = [
-            {"id": "invalid", "provider": "codex", "state": []},
-            {"id": "valid", "provider": "codex", "state": "active"},
+            {"id": "invalid", "provider": "codex", "state": [], "source": "desktopApp"},
+            {"id": "valid", "provider": "codex", "state": "active", "source": "desktopApp"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_app_is_running", return_value=False):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["codex"], {"active": 1, "idle": 0})
         self.assertFalse(store.sessions.refreshing)
@@ -212,6 +212,41 @@ class CoreTests(unittest.TestCase):
             {"id": "newer", "state": "active", "lastActivityAt": "2026-08-31T11:00:00Z"},
         ]
         self.assertEqual([item["id"] for item in sorted(sessions, key=session_sort_key)], ["newer", "older", "idle"])
+
+    def test_attention_sessions_sort_before_active_and_idle(self) -> None:
+        sessions = [
+            {"id": "idle", "state": "idle"},
+            {"id": "active", "state": "active"},
+            {"id": "attention", "state": "needs_input"},
+        ]
+        self.assertEqual(
+            [item["id"] for item in sorted(sessions, key=session_sort_key)],
+            ["attention", "active", "idle"],
+        )
+
+    def test_claude_session_title_is_enriched_from_desktop_metadata(self) -> None:
+        store = StateStore()
+        sessions = [{"id": "claude-id", "provider": "claude", "state": "active", "source": "desktopApp"}]
+        metadata = {"claude-id": {"title": "Visible Claude title", "sessionId": "local-id"}}
+        with (
+            patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            patch.object(store, "_claude_titles", return_value=metadata),
+            patch.object(store, "_app_is_running", return_value=False),
+        ):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value[0]["sessionName"], "Visible Claude title")
+        self.assertEqual(store.sessions.value[0]["appSessionId"], "local-id")
+
+    def test_antigravity_presence_is_explicitly_app_level(self) -> None:
+        store = StateStore()
+        with (
+            patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
+            patch.object(store, "_claude_titles", return_value={}),
+            patch.object(store, "_app_is_running", return_value=True),
+        ):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value[0]["source"], "appPresence")
+        self.assertEqual(store.sessions.value[0]["state"], "available")
 
     def test_compact_snapshot_does_not_expose_transcripts_or_accounts(self) -> None:
         snapshot = {

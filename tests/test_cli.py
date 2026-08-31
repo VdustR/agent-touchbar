@@ -59,9 +59,10 @@ class CliTests(unittest.TestCase):
                 ["/custom/bin/python", "-m", "codexbar_touchbar", "serve"],
             )
 
-    def test_install_replaces_widgets_before_starting_service(self) -> None:
+    def test_install_stops_service_before_replacing_widgets(self) -> None:
         events = []
         with (
+            patch("codexbar_touchbar.cli.stop_service", side_effect=lambda: events.append("stop")),
             patch("codexbar_touchbar.cli.install_service", side_effect=lambda: events.append("service")),
             patch("codexbar_touchbar.cli.install_widgets", side_effect=lambda _: events.append("widgets") or []),
             patch("codexbar_touchbar.cli.extract_icons", return_value={}),
@@ -70,7 +71,7 @@ class CliTests(unittest.TestCase):
             parser.return_value.parse_args.return_value.command = "install"
             parser.return_value.parse_args.return_value.session_slots = 4
             main()
-        self.assertEqual(events, ["widgets", "service"])
+        self.assertEqual(events, ["stop", "widgets", "service"])
 
     def test_doctor_requires_launch_agent(self) -> None:
         snapshot = {"sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}

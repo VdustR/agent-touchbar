@@ -33,6 +33,13 @@ def launch_agent_path() -> Path:
     return Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 
 
+def stop_service() -> None:
+    subprocess.run(
+        ["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"],
+        capture_output=True,
+    )
+
+
 def install_service() -> None:
     target = launch_agent_path()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -59,7 +66,7 @@ def install_service() -> None:
         },
     }
     target.write_bytes(plistlib.dumps(payload))
-    subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(target)], capture_output=True)
+    stop_service()
     subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(target)], check=True)
 
 
@@ -154,6 +161,9 @@ def main() -> None:
     if args.command == "serve":
         serve("127.0.0.1", 4317)
     elif args.command == "install":
+        # Prevent the previous service process from racing trigger replacement
+        # with stale update semantics during an in-place upgrade.
+        stop_service()
         icons = extract_icons()
         for result in install_widgets(args.session_slots):
             print(result)

@@ -17,6 +17,8 @@ from urllib.parse import quote
 PROVIDERS = ("codex", "claude", "antigravity")
 APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity"}
 WINDOW_LABELS = {300: "5h", 10080: "7d"}
+ATTENTION_STATES = {"attention", "blocked", "needs_input", "waiting", "approval_required"}
+DISPLAY_STATES = ATTENTION_STATES | {"active", "idle", "available"}
 
 
 def find_executable(name: str, candidates: tuple[str, ...]) -> str:
@@ -61,7 +63,12 @@ def quota_windows(provider: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def session_sort_key(session: dict[str, Any]) -> tuple[int, float]:
-    state_rank = 0 if session.get("state") == "active" else 1
+    state = session.get("state")
+    state_rank = (
+        0
+        if isinstance(state, str) and state in ATTENTION_STATES
+        else {"active": 1, "available": 2, "idle": 3}.get(state if isinstance(state, str) else "", 4)
+    )
     raw = session.get("lastActivityAt") or session.get("startedAt") or ""
     try:
         timestamp = datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
@@ -86,6 +93,8 @@ class StateStore:
         self.sessions = Cache([])
         self.session_counts: dict[str, dict[str, int]] = {}
         self.usage = Cache([], error={})
+        self._claude_title_cache: dict[str, dict[str, str]] = {}
+        self._claude_title_cache_at = 0.0
 
     def _refresh_sessions(self) -> None:
         counts: dict[str, dict[str, int]] = {}
@@ -109,10 +118,27 @@ class StateStore:
                 item
                 for item in value
                 if isinstance(item, dict)
-                and item.get("provider") == "codex"
+                and item.get("provider") in {"codex", "claude"}
                 and isinstance(item.get("id"), str)
                 and isinstance(item.get("state"), str)
+                and item.get("state") in DISPLAY_STATES
+                and item.get("source") == "desktopApp"
             ]
+            claude_titles = self._claude_titles()
+            for item in value:
+                if item.get("provider") == "claude":
+                    metadata = claude_titles.get(item["id"])
+                    if metadata:
+                        item["sessionName"] = metadata.get("title")
+                        item["appSessionId"] = metadata.get("sessionId")
+            if self._app_is_running("Antigravity"):
+                value.append({
+                    "id": "app:antigravity",
+                    "provider": "antigravity",
+                    "sessionName": "Antigravity Desktop",
+                    "state": "available",
+                    "source": "appPresence",
+                })
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
             value, error = None, str(caught)
         with self.lock:
@@ -122,6 +148,34 @@ class StateStore:
             self.sessions.error = error
             self.sessions.updated_at = time.monotonic()
             self.sessions.refreshing = False
+
+    def _claude_titles(self) -> dict[str, dict[str, str]]:
+        now = time.monotonic()
+        if self._claude_title_cache_at and now - self._claude_title_cache_at < 5:
+            return self._claude_title_cache
+        root = Path.home() / "Library/Application Support/Claude/claude-code-sessions"
+        result: dict[str, dict[str, str]] = {}
+        for path in root.glob("*/*/*.json"):
+            try:
+                item = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(item, dict) or not isinstance(item.get("cliSessionId"), str):
+                continue
+            result[item["cliSessionId"]] = {
+                key: value
+                for key in ("title", "sessionId")
+                if isinstance((value := item.get(key)), str) and value
+            }
+        self._claude_title_cache = result
+        self._claude_title_cache_at = now
+        return result
+
+    @staticmethod
+    def _app_is_running(name: str) -> bool:
+        return subprocess.run(
+            ["/usr/bin/pgrep", "-x", name], capture_output=True, timeout=2
+        ).returncode == 0
 
     def _refresh_usage(self) -> None:
         with self.lock:
@@ -235,6 +289,20 @@ class StateStore:
                 timeout=3,
             )
             return
+        if provider in APP_NAMES:
+            if provider == "claude":
+                try:
+                    subprocess.run(
+                        [codexbar_path(), "sessions", "focus", session_id],
+                        check=True, capture_output=True, text=True, timeout=8,
+                    )
+                    return
+                except subprocess.SubprocessError:
+                    pass
+            subprocess.run(
+                ["/usr/bin/open", "-a", APP_NAMES[provider]], check=True, timeout=8
+            )
+            return
         subprocess.run(
             [codexbar_path(), "sessions", "focus", session_id],
             check=True,
@@ -256,7 +324,7 @@ def compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     ]
     session_keys = (
         "id", "provider", "projectName", "sessionName", "state", "source",
-        "lastActivityAt", "startedAt",
+        "lastActivityAt", "startedAt", "appSessionId",
     )
     sessions = [{key: item.get(key) for key in session_keys} for item in snapshot["sessions"]]
     return {"generatedAt": snapshot["generatedAt"], "providers": providers, "sessions": sessions}
