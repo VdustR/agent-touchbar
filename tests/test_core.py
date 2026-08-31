@@ -237,6 +237,52 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(store.sessions.value[0]["sessionName"], "Visible Claude title")
         self.assertEqual(store.sessions.value[0]["appSessionId"], "local-id")
 
+    def test_claude_metadata_without_title_preserves_codexbar_name(self) -> None:
+        store = StateStore()
+        sessions = [{
+            "id": "claude-id",
+            "provider": "claude",
+            "state": "active",
+            "source": "desktopApp",
+            "sessionName": "CodexBar title",
+        }]
+        with (
+            patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            patch.object(store, "_claude_titles", return_value={
+                "claude-id": {"sessionId": "local-id"}
+            }),
+            patch.object(store, "_app_is_running", return_value=False),
+        ):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value[0]["sessionName"], "CodexBar title")
+        self.assertEqual(store.sessions.value[0]["appSessionId"], "local-id")
+
+    def test_invalid_utf8_claude_metadata_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            metadata = (
+                home
+                / "Library/Application Support/Claude/claude-code-sessions"
+                / "account/project/local_session.json"
+            )
+            metadata.parent.mkdir(parents=True)
+            metadata.write_bytes(b"\xff\xfe")
+            store = StateStore()
+            with patch("codexbar_touchbar.core.Path.home", return_value=home):
+                self.assertEqual(store._claude_titles(), {})
+
+    @patch("codexbar_touchbar.core.subprocess.run")
+    @patch("codexbar_touchbar.core.codexbar_path", side_effect=FileNotFoundError)
+    def test_claude_focus_falls_back_when_codexbar_is_missing(self, _path, run) -> None:
+        store = StateStore()
+        store.sessions.value = [{
+            "id": "claude-id", "provider": "claude", "source": "desktopApp"
+        }]
+        store.focus_session("claude-id")
+        run.assert_called_once_with(
+            ["/usr/bin/open", "-a", "Claude"], check=True, timeout=8
+        )
+
     def test_antigravity_presence_is_explicitly_app_level(self) -> None:
         store = StateStore()
         with (

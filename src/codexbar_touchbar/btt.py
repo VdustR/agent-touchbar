@@ -158,7 +158,7 @@ def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, di
             payload.update({
                 "BTTTouchBarButtonName": f"{'!' if attention else ('●' if active else '○')} {name[:16]}",
                 "BTTTerminalCommand": session_payload_action(item["id"]),
-                "BTTOrder": index if attention else 20 + index,
+                "BTTOrder": -session_slots + index if attention else 20 + index,
                 "BTTTriggerConfig": {"BTTTouchBarButtonColor": "112, 35, 42, 255" if attention else ("27, 75, 61, 255" if active else "27, 32, 40, 255")},
             })
             encoded_icon = icon_data(item.get("provider", ""))
@@ -180,13 +180,13 @@ def update_buttons(
     for index in range(session_slots):
         trigger_id = widget_uuid(f"Agent session {index + 1}")
         if trigger_id not in current and (previous is None or trigger_id in previous):
-            existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+            existing = trigger_payload(trigger_id)
             if existing not in {"", "null", "{}", "[]"}:
                 run_cli("delete_trigger", f"uuid={trigger_id}")
     for trigger_id, payload in current.items():
         if previous is None or previous.get(trigger_id) != payload:
             if trigger_id in session_ids:
-                existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
+                existing = trigger_payload(trigger_id)
                 if existing not in {"", "null", "{}", "[]"}:
                     # Partial update_trigger payloads are interpreted as generic
                     # mouse triggers by BTT 6.x. Replace the full Touch Bar
@@ -207,6 +207,15 @@ def update_buttons(
                 f"json={json.dumps(payload, separators=(',', ':'))}",
             )
     return current
+
+
+def trigger_payload(trigger_id: str) -> str:
+    lookup = run_cli("get_trigger", f"uuid={trigger_id}", check=False)
+    if lookup.returncode != 0:
+        raise subprocess.CalledProcessError(
+            lookup.returncode, lookup.args, lookup.stdout, lookup.stderr
+        )
+    return lookup.stdout.strip()
 
 
 def session_definition(index: int) -> dict:

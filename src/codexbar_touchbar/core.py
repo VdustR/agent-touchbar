@@ -129,7 +129,8 @@ class StateStore:
                 if item.get("provider") == "claude":
                     metadata = claude_titles.get(item["id"])
                     if metadata:
-                        item["sessionName"] = metadata.get("title")
+                        if metadata.get("title"):
+                            item["sessionName"] = metadata["title"]
                         item["appSessionId"] = metadata.get("sessionId")
             if self._app_is_running("Antigravity"):
                 value.append({
@@ -158,7 +159,7 @@ class StateStore:
         for path in root.glob("*/*/*.json"):
             try:
                 item = json.loads(path.read_text())
-            except (OSError, json.JSONDecodeError):
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 continue
             if not isinstance(item, dict) or not isinstance(item.get("cliSessionId"), str):
                 continue
@@ -297,7 +298,7 @@ class StateStore:
                         check=True, capture_output=True, text=True, timeout=8,
                     )
                     return
-                except subprocess.SubprocessError:
+                except (OSError, subprocess.SubprocessError):
                     pass
             subprocess.run(
                 ["/usr/bin/open", "-a", APP_NAMES[provider]], check=True, timeout=8

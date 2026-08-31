@@ -31,6 +31,23 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertLess(updates[widget_uuid("Agent session 1")]["BTTOrder"], 10)
         self.assertGreater(updates[widget_uuid("Agent session 2")]["BTTOrder"], 12)
 
+    def test_all_supported_attention_slots_precede_quota_orders(self) -> None:
+        snapshot = {"usage": [], "sessions": [
+            {
+                "id": f"attention-{index}",
+                "provider": "codex",
+                "source": "desktopApp",
+                "state": "needs_input",
+            }
+            for index in range(12)
+        ]}
+        updates = dict(button_updates(snapshot, 12))
+        orders = [
+            updates[widget_uuid(f"Agent session {index + 1}")]["BTTOrder"]
+            for index in range(12)
+        ]
+        self.assertLess(max(orders), 10)
+
     def test_native_button_updates_bind_visible_session_identity(self) -> None:
         snapshot = {
             "usage": [{"provider": "codex", "usage": {"primary": {"windowMinutes": 10080, "usedPercent": 25}}}],
@@ -64,6 +81,7 @@ class BetterTouchToolTests(unittest.TestCase):
 
     @patch("codexbar_touchbar.btt.run_cli")
     def test_unchanged_native_buttons_are_not_reconfigured(self, run_cli) -> None:
+        run_cli.return_value = subprocess.CompletedProcess([], 0, "{}", "")
         snapshot = {"usage": [], "sessions": []}
         previous = update_buttons(snapshot, 2)
         first_count = run_cli.call_count
@@ -77,6 +95,14 @@ class BetterTouchToolTests(unittest.TestCase):
         run_cli.assert_any_call(
             "delete_trigger", f"uuid={widget_uuid('Agent session 1')}"
         )
+
+    @patch("codexbar_touchbar.btt.run_cli")
+    def test_failed_stale_trigger_lookup_is_retried_by_the_update_loop(self, run_cli) -> None:
+        run_cli.return_value = subprocess.CompletedProcess(
+            ["bttcli", "get_trigger"], 1, "", "socket unavailable"
+        )
+        with self.assertRaises(subprocess.CalledProcessError):
+            update_buttons({"usage": [], "sessions": []}, 1, None)
 
     @patch("codexbar_touchbar.btt.run_cli")
     def test_dynamic_session_trigger_is_created_and_removed(self, run_cli) -> None:

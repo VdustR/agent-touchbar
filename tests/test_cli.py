@@ -73,6 +73,35 @@ class CliTests(unittest.TestCase):
             main()
         self.assertEqual(events, ["stop", "widgets", "service"])
 
+    def test_failed_update_restores_previous_service(self) -> None:
+        events = []
+        with (
+            patch("codexbar_touchbar.cli.launch_agent_path") as plist,
+            patch("codexbar_touchbar.cli.stop_service", side_effect=lambda: events.append("stop")),
+            patch("codexbar_touchbar.cli.start_service", side_effect=lambda: events.append("restore")),
+            patch("codexbar_touchbar.cli.install_widgets", side_effect=OSError("BTT failed")),
+            patch("codexbar_touchbar.cli.extract_icons", return_value={}),
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            plist.return_value.is_file.return_value = True
+            parser.return_value.parse_args.return_value.command = "install"
+            parser.return_value.parse_args.return_value.session_slots = 4
+            with self.assertRaises(OSError):
+                main()
+        self.assertEqual(events, ["stop", "restore"])
+
+    def test_uninstall_stops_service_before_removing_widgets(self) -> None:
+        events = []
+        with (
+            patch("codexbar_touchbar.cli.uninstall_service", side_effect=lambda: events.append("service")),
+            patch("codexbar_touchbar.cli.uninstall_widgets", side_effect=lambda _: events.append("widgets") or []),
+            patch("codexbar_touchbar.cli.build_parser") as parser,
+        ):
+            parser.return_value.parse_args.return_value.command = "uninstall"
+            parser.return_value.parse_args.return_value.session_slots = 4
+            main()
+        self.assertEqual(events, ["service", "widgets"])
+
     def test_doctor_requires_launch_agent(self) -> None:
         snapshot = {"sessions": [], "usage": [], "errors": {"sessions": None, "usage": {}}}
         with (

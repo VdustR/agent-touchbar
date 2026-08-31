@@ -70,6 +70,13 @@ def install_service() -> None:
     subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(target)], check=True)
 
 
+def start_service() -> None:
+    subprocess.run(
+        ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(launch_agent_path())],
+        check=True,
+    )
+
+
 def uninstall_service() -> None:
     target = launch_agent_path()
     result = subprocess.run(
@@ -163,16 +170,27 @@ def main() -> None:
     elif args.command == "install":
         # Prevent the previous service process from racing trigger replacement
         # with stale update semantics during an in-place upgrade.
+        restore_service = launch_agent_path().is_file()
         stop_service()
-        icons = extract_icons()
-        for result in install_widgets(args.session_slots):
-            print(result)
-        install_service()
+        try:
+            icons = extract_icons()
+            for result in install_widgets(args.session_slots):
+                print(result)
+            install_service()
+        except Exception as error:
+            if restore_service:
+                try:
+                    start_service()
+                except (OSError, subprocess.SubprocessError) as restore_error:
+                    error.add_note(
+                        f"Failed to restore the previous service: {type(restore_error).__name__}"
+                    )
+            raise
         print(json.dumps({"icons": icons}))
     elif args.command == "uninstall":
+        uninstall_service()
         for name in uninstall_widgets(args.session_slots):
             print(f"removed: {name}")
-        uninstall_service()
     elif args.command == "doctor":
         raise SystemExit(doctor())
 
