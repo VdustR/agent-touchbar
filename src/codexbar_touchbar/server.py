@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +13,7 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 
 from .core import APP_NAMES, StateStore, compact_snapshot
+from .btt import previous_slot_count, update_buttons
 
 
 class StateSource(Protocol):
@@ -139,4 +141,13 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
         raise ValueError("The bridge only permits a loopback host")
     state = store or StateStore()
     state.wait_for_initial_data()
+    def update_loop() -> None:
+        while True:
+            try:
+                update_buttons(state.snapshot(), previous_slot_count())
+            except (OSError, subprocess.SubprocessError, ValueError):
+                pass
+            time.sleep(2)
+
+    threading.Thread(target=update_loop, daemon=True, name="btt-buttons").start()
     ThreadingHTTPServer((host, port), handler_factory(state)).serve_forever()

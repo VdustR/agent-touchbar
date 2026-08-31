@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from codexbar_touchbar.btt import definitions, install_widgets, session_action, session_script, widget_uuid
+from codexbar_touchbar.btt import button_updates, definitions, install_widgets, session_action, session_script, widget_uuid
 
 
 class BetterTouchToolTests(unittest.TestCase):
@@ -27,8 +27,21 @@ class BetterTouchToolTests(unittest.TestCase):
         session_orders = [item["BTTOrder"] for item in widgets[3:]]
         self.assertLess(max(quota_orders), min(session_orders))
 
+    def test_native_button_updates_bind_visible_session_identity(self) -> None:
+        snapshot = {
+            "usage": [{"provider": "codex", "usage": {"primary": {"windowMinutes": 10080, "usedPercent": 25}}}],
+            "sessions": [{"id": "session-1", "state": "active", "sessionName": "Current"}],
+        }
+        updates = dict(button_updates(snapshot, 2))
+        quota = updates[widget_uuid("Codex usage")]
+        session = updates[widget_uuid("Agent session 1")]
+        empty = updates[widget_uuid("Agent session 2")]
+        self.assertEqual(quota["BTTTouchBarButtonName"], "7d 75%")
+        self.assertIn('session-1', session["BTTTerminalCommand"])
+        self.assertFalse(empty["BTTEnabled"])
+
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
-        names = [item["BTTWidgetName"] for item in definitions()]
+        names = [item["BTTTouchBarButtonName"] for item in definitions()]
         self.assertNotIn("Attention session", names)
 
     def test_session_action_uses_identity_persisted_by_render(self) -> None:

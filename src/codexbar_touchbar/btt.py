@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import os
 import shlex
 import shutil
@@ -10,7 +11,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from .core import APP_NAMES, PROVIDERS, find_executable
+from .core import APP_NAMES, PROVIDERS, find_executable, quota_windows
 
 NAMESPACE = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
 BASE_URL = "http://127.0.0.1:4317"
@@ -59,11 +60,12 @@ def validate_slot_count(value: int) -> int:
 
 
 def widget(name: str, script: str, action: str, width: int, order: int, interval: float) -> dict:
-    return {
+    provider = next((item for item in PROVIDERS if name.lower().startswith(item)), None)
+    result = {
         "BTTUUID": widget_uuid(name),
-        "BTTTriggerType": 642,
+        "BTTTriggerType": 629,
         "BTTTriggerClass": "BTTTriggerTypeTouchBar",
-        "BTTWidgetName": name,
+        "BTTTouchBarButtonName": name,
         "BTTEnabled": 1,
         "BTTOrder": order,
         # Touch Bar script widgets still read their primary tap action from
@@ -71,7 +73,6 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
         # through the scripting API but is not dispatched by a physical tap.
         "BTTPredefinedActionType": 137,
         "BTTTerminalCommand": action,
-        "BTTShellScriptWidgetGestureConfig": "/bin/bash:::-c:::-::::",
         "BTTTriggerConfig": {
             "BTTTouchBarButtonColor": "20, 25, 32, 255",
             "BTTTouchBarFontColor": "235, 241, 248, 255",
@@ -79,11 +80,54 @@ def widget(name: str, script: str, action: str, width: int, order: int, interval
             "BTTTouchBarItemPadding": 6,
             "BTTTouchBarButtonWidth": width,
             "BTTTouchBarButtonHeight": 28,
-            "BTTTouchBarShellScriptString": script,
-            "BTTTouchBarScriptUpdateInterval": interval,
             "BTTTouchBarAlwaysShowButton": True,
         },
     }
+    if provider and Path(icon_path(provider)).is_file():
+        result["BTTIconData"] = base64.b64encode(Path(icon_path(provider)).read_bytes()).decode()
+        result["BTTTriggerConfig"]["BTTTouchBarItemIconWidth"] = 18
+        result["BTTTriggerConfig"]["BTTTouchBarItemIconHeight"] = 18
+    return result
+
+
+def button_updates(snapshot: dict, session_slots: int = 4) -> list[tuple[str, dict]]:
+    updates: list[tuple[str, dict]] = []
+    usage = {item.get("provider"): item for item in snapshot.get("usage", [])}
+    for provider in PROVIDERS:
+        windows = quota_windows(usage.get(provider, {}))
+        parts = []
+        remaining = []
+        for window in windows:
+            used = window.get("usedPercent")
+            if isinstance(used, (int, float)):
+                value = 100 - used
+                remaining.append(value)
+                parts.append(f"{window.get('label', 'limit')} {value:.0f}%")
+        low = min(remaining) if remaining else 100
+        color = "30, 78, 64, 255" if low >= 50 else ("112, 72, 22, 255" if low >= 20 else "112, 35, 42, 255")
+        updates.append((widget_uuid(f"{provider.title()} usage"), {
+            "BTTTouchBarButtonName": " · ".join(parts) or "—",
+            "BTTTriggerConfig": {"BTTTouchBarButtonColor": color},
+        }))
+    sessions = snapshot.get("sessions", [])
+    for index in range(session_slots):
+        item = sessions[index] if index < len(sessions) else None
+        payload: dict = {"BTTEnabled": bool(item)}
+        if item:
+            active = item.get("state") == "active"
+            name = item.get("sessionName") or item.get("projectName") or "session"
+            payload.update({
+                "BTTTouchBarButtonName": f"{'●' if active else '○'} {name[:16]}",
+                "BTTTerminalCommand": session_payload_action(item["id"]),
+                "BTTTriggerConfig": {"BTTTouchBarButtonColor": "27, 75, 61, 255" if active else "27, 32, 40, 255"},
+            })
+        updates.append((widget_uuid(f"Agent session {index + 1}"), payload))
+    return updates
+
+
+def update_buttons(snapshot: dict, session_slots: int = 4) -> None:
+    for trigger_id, payload in button_updates(snapshot, session_slots):
+        run_cli("update_trigger", f"uuid={trigger_id}", f"json={json.dumps(payload, separators=(',', ':'))}")
 
 
 def quota_script(provider: str) -> str:
@@ -137,6 +181,11 @@ def session_action(index: int) -> str:
     return rf'''if [ -s {action_path} ]; then /usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data-binary @{action_path} {BASE_URL}/api/focus/session >/dev/null; fi'''
 
 
+def session_payload_action(session_id: str) -> str:
+    payload = json.dumps({"id": session_id}, separators=(",", ":"))
+    return f"/usr/bin/curl -sf -X POST -H 'Content-Type: application/json' --data '{payload}' {BASE_URL}/api/focus/session >/dev/null"
+
+
 def definitions(session_slots: int = 4) -> list[dict]:
     validate_slot_count(session_slots)
     result = [
@@ -167,13 +216,14 @@ def install_widgets(session_slots: int = 4) -> list[str]:
             # leading No Action entry that intercepts physical Touch Bar taps.
             run_cli("delete_trigger", f"uuid={trigger_id}")
         run_cli("add_new_trigger", f"json={payload}")
-        results.append(f"replace_trigger: {definition['BTTWidgetName']}")
+        results.append(f"replace_trigger: {definition['BTTTouchBarButtonName']}")
     for legacy_name in ("Attention session", "Agent usage"):
         legacy_id = widget_uuid(legacy_name)
         existing = run_cli("get_trigger", f"uuid={legacy_id}", check=False).stdout.strip()
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={legacy_id}")
             results.append(f"delete_trigger: {legacy_name}")
+    run_cli("delete_trigger", "uuid=E4F85058-56B7-4DBD-9064-3C26F11B8C52", check=False)
     for index in range(session_slots, old_slot_count):
         name = f"Agent session {index + 1}"
         run_cli("delete_trigger", f"uuid={widget_uuid(name)}", check=False)
@@ -210,7 +260,11 @@ def extract_icons() -> dict[str, bool]:
     for provider, source in sources.items():
         target = destination / f"{provider}.png"
         if Path(source).is_file():
-            subprocess.run(["/usr/bin/sips", "-s", "format", "png", source, "--out", target], check=True, capture_output=True)
+            subprocess.run(
+                ["/usr/bin/sips", "-s", "format", "png", "-z", "36", "36", source, "--out", target],
+                check=True,
+                capture_output=True,
+            )
             result[provider] = True
         else:
             target.unlink(missing_ok=True)
