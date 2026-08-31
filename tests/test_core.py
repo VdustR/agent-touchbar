@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from codexbar_touchbar.core import StateStore, compact_snapshot, quota_windows, session_sort_key
+from codexbar_touchbar.core import StateStore, compact_snapshot, find_executable, quota_windows, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
+    def test_find_executable_preserves_stable_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "versioned"
+            link = root / "stable"
+            target.write_text("")
+            link.symlink_to(target)
+            with patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_TOOL": str(link)}):
+                self.assertEqual(find_executable("tool", ()), str(link))
+
     def test_session_refresh_interval_prioritizes_interactive_updates(self) -> None:
         self.assertLessEqual(StateStore().sessions_ttl, 0.75)
 
@@ -94,6 +107,19 @@ class CoreTests(unittest.TestCase):
             store._refresh_usage()
         self.assertEqual(store.usage.value, [{"provider": "codex", "usage": {}}])
         self.assertIn("not a list", store.usage.error["codex"])
+
+    def test_usage_refresh_rejects_non_object_usage(self) -> None:
+        store = StateStore()
+        store.usage.value = [{"provider": "codex", "usage": {}}]
+
+        def response(*args, **kwargs):
+            provider = args[2]
+            return [{"provider": provider, "usage": "unavailable"}]
+
+        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+            store._refresh_usage()
+        self.assertEqual(store.usage.value, [{"provider": "codex", "usage": {}}])
+        self.assertIn("invalid shape", store.usage.error["codex"])
 
     def test_usage_refresh_publishes_codex_before_optional_providers(self) -> None:
         store = StateStore()

@@ -18,7 +18,15 @@ if [ -x "$COMMAND" ]; then
 elif [ -x "$VENV_COMMAND" ]; then
   "$VENV_COMMAND" uninstall "$@"
 else
-  /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>/dev/null || true
+  if ! bootout_output=$(/bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>&1); then
+    case "$bootout_output" in
+      *"Could not find specified service"*|*"No such process"*) ;;
+      *)
+        echo "$bootout_output" >&2
+        exit 1
+        ;;
+    esac
+  fi
   rm -f "$PLIST"
   cleanup_failed=0
   if [ -x "$BTTCLI" ] && [ -x "$PYTHON_BIN" ]; then

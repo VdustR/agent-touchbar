@@ -56,6 +56,7 @@ class ServerTests(unittest.TestCase):
     def test_health(self) -> None:
         status, body = self.request("GET", "/healthz")
         self.assertEqual(status, 200)
+        self.assertEqual(body["service"], "codexbar-touchbar")
         self.assertTrue(body["ok"])
         self.assertIsNone(body["lastAction"])
 

@@ -86,7 +86,11 @@ def bridge_is_healthy() -> bool:
         try:
             with urllib.request.urlopen("http://127.0.0.1:4317/healthz", timeout=0.5) as response:
                 payload = json.loads(response.read())
-            if response.status == 200 and payload.get("ok") is True:
+            if (
+                response.status == 200
+                and payload.get("service") == "codexbar-touchbar"
+                and payload.get("ok") is True
+            ):
                 return True
         except (OSError, urllib.error.URLError, json.JSONDecodeError):
             pass
@@ -96,8 +100,10 @@ def bridge_is_healthy() -> bool:
 
 def doctor() -> int:
     checks: dict[str, object] = {}
+    codexbar_available = False
     try:
         checks["codexbar"] = codexbar_path()
+        codexbar_available = True
     except FileNotFoundError as error:
         checks["codexbar"] = str(error)
     try:
@@ -124,7 +130,7 @@ def doctor() -> int:
         and not snapshot["errors"]["sessions"]
         and "codex" not in snapshot["errors"]["usage"]
         and "codex" in checks["usageProviders"]
-        and "Required" not in str(checks["codexbar"])
+        and codexbar_available
     )
     print(json.dumps({"ok": ok, "checks": checks}, indent=2, ensure_ascii=False))
     return 0 if ok else 1

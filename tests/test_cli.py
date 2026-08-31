@@ -144,6 +144,29 @@ class CliTests(unittest.TestCase):
             store_type.return_value.snapshot.return_value = snapshot
             self.assertEqual(doctor(), 1)
 
+    def test_doctor_accepts_valid_executable_path_containing_required(self) -> None:
+        snapshot = {
+            "sessions": [],
+            "usage": [{"provider": "codex", "usage": {}}],
+            "errors": {"sessions": None, "usage": {}},
+        }
+        with (
+            patch(
+                "codexbar_touchbar.cli.codexbar_path",
+                return_value="/Users/me/Required Tools/codexbar",
+            ),
+            patch("codexbar_touchbar.cli.launch_agent_path") as plist,
+            patch("codexbar_touchbar.cli.bttcli_path", return_value="/bin/bttcli"),
+            patch("codexbar_touchbar.cli.run_cli") as run_cli,
+            patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("codexbar_touchbar.cli.StateStore") as store_type,
+        ):
+            plist.return_value.is_file.return_value = True
+            run_cli.return_value.returncode = 0
+            run_cli.return_value.stdout = '{"BTTUUID":"installed"}'
+            store_type.return_value.snapshot.return_value = snapshot
+            self.assertEqual(doctor(), 0)
+
     @patch("codexbar_touchbar.cli.subprocess.run")
     def test_uninstall_boots_out_loaded_label_without_plist(self, run) -> None:
         run.return_value.returncode = 0

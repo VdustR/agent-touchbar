@@ -20,15 +20,18 @@ WINDOW_LABELS = {300: "5h", 10080: "7d"}
 
 
 def find_executable(name: str, candidates: tuple[str, ...]) -> str:
+    def absolute(path: str) -> str:
+        return str(Path(path).expanduser().absolute())
+
     override = os.environ.get(f"CODEXBAR_TOUCHBAR_{name.upper()}")
     if override and Path(override).is_file():
-        return str(Path(override).resolve())
+        return absolute(override)
     resolved = shutil.which(name)
     if resolved:
-        return str(Path(resolved).resolve())
+        return absolute(resolved)
     for candidate in candidates:
         if Path(candidate).is_file():
-            return str(Path(candidate).resolve())
+            return absolute(candidate)
     raise FileNotFoundError(f"Required executable not found: {name}")
 
 
@@ -128,6 +131,13 @@ class StateStore:
                 payload = run_codexbar("usage", "--provider", provider, "--format", "json")
                 if not isinstance(payload, list):
                     raise ValueError("CodexBar usage payload is not a list")
+                if any(
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("provider"), str)
+                    or not isinstance(item.get("usage"), dict)
+                    for item in payload
+                ):
+                    raise ValueError("CodexBar usage entry has an invalid shape")
                 current.update(
                     (item["provider"], item)
                     for item in payload

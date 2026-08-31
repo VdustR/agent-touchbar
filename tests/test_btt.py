@@ -102,6 +102,23 @@ class BetterTouchToolTests(unittest.TestCase):
         updates = dict(button_updates(snapshot, 1))
         self.assertFalse(updates[widget_uuid("Agent session 1")]["BTTEnabled"])
 
+    def test_non_string_session_labels_fall_back_safely(self) -> None:
+        snapshot = {
+            "usage": [],
+            "sessions": [
+                {
+                    "id": "valid",
+                    "provider": "codex",
+                    "source": "desktopApp",
+                    "state": "active",
+                    "sessionName": 1,
+                    "projectName": [],
+                }
+            ],
+        }
+        session = dict(button_updates(snapshot, 1))[widget_uuid("Agent session 1")]
+        self.assertEqual(session["BTTTouchBarButtonName"], "● session")
+
     def test_no_attention_widget_is_created_without_a_supported_state(self) -> None:
         names = [item["BTTTouchBarButtonName"] for item in definitions()]
         self.assertNotIn("Attention session", names)

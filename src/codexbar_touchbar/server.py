@@ -113,6 +113,7 @@ def handler_factory(
                 status = HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE
                 self.send_json(
                     {
+                        "service": "codexbar-touchbar",
                         "ok": status == HTTPStatus.OK,
                         "errors": snapshot["errors"],
                         "lastAction": tracker.snapshot(),
