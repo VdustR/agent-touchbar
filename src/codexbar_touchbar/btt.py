@@ -160,10 +160,12 @@ def install_widgets(session_slots: int = 4) -> list[str]:
         trigger_id = definition["BTTUUID"]
         existing = run_cli("get_trigger", f"uuid={trigger_id}", check=False).stdout.strip()
         payload = json.dumps(definition, ensure_ascii=False, separators=(",", ":"))
-        verb = "update_trigger" if existing not in {"", "null", "{}", "[]"} else "add_new_trigger"
-        args = (verb, f"uuid={trigger_id}", f"json={payload}") if verb == "update_trigger" else (verb, f"json={payload}")
-        run_cli(*args)
-        results.append(f"{verb}: {definition['BTTWidgetName']}")
+        if existing not in {"", "null", "{}", "[]"}:
+            # BTT merges action arrays during update_trigger, which can leave a
+            # leading No Action entry that intercepts physical Touch Bar taps.
+            run_cli("delete_trigger", f"uuid={trigger_id}")
+        run_cli("add_new_trigger", f"json={payload}")
+        results.append(f"replace_trigger: {definition['BTTWidgetName']}")
     for legacy_name in ("Attention session", "Agent usage"):
         legacy_id = widget_uuid(legacy_name)
         existing = run_cli("get_trigger", f"uuid={legacy_id}", check=False).stdout.strip()

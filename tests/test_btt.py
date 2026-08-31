@@ -54,6 +54,19 @@ class BetterTouchToolTests(unittest.TestCase):
             self.assertIn(f"uuid={widget_uuid('Agent session 3')}", deleted)
             self.assertIn(f"uuid={widget_uuid('Agent session 5')}", deleted)
 
+    def test_install_replaces_managed_triggers_to_avoid_merged_actions(self) -> None:
+        with TemporaryDirectory() as temporary:
+            with (
+                patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
+                patch("codexbar_touchbar.btt.run_cli") as run_cli,
+            ):
+                run_cli.return_value.stdout = '{"BTTUUID":"existing"}'
+                install_widgets(1)
+            calls = [call.args[0] for call in run_cli.call_args_list if call.args]
+            self.assertEqual(calls.count("add_new_trigger"), 4)
+            self.assertGreaterEqual(calls.count("delete_trigger"), 4)
+            self.assertNotIn("update_trigger", calls)
+
 
 if __name__ == "__main__":
     unittest.main()
