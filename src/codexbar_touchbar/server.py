@@ -172,7 +172,7 @@ def serve(host: str, port: int, store: StateStore | None = None) -> None:
     state = store or StateStore()
     state.wait_for_initial_data()
     def update_loop() -> None:
-        previous: dict[str, dict] = {}
+        previous: dict[str, dict] | None = None
         retry_delay = 0.25
         while True:
             try:

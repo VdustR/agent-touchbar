@@ -71,6 +71,14 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertEqual(run_cli.call_count, first_count)
 
     @patch("codexbar_touchbar.btt.run_cli")
+    def test_initial_refresh_removes_stale_empty_session_trigger(self, run_cli) -> None:
+        run_cli.return_value = subprocess.CompletedProcess([], 0, '{"BTTUUID":"existing"}', "")
+        update_buttons({"usage": [], "sessions": []}, 1, None)
+        run_cli.assert_any_call(
+            "delete_trigger", f"uuid={widget_uuid('Agent session 1')}"
+        )
+
+    @patch("codexbar_touchbar.btt.run_cli")
     def test_dynamic_session_trigger_is_created_and_removed(self, run_cli) -> None:
         run_cli.return_value = subprocess.CompletedProcess([], 0, "{}", "")
         active = {"usage": [], "sessions": [
