@@ -130,6 +130,19 @@ class StateStore:
                         for item in payload
                         if isinstance(item, dict) and isinstance(item.get("provider"), str)
                     )
+                    with self.lock:
+                        published = {
+                            item["provider"]: item
+                            for item in self.usage.value
+                            if isinstance(item, dict) and isinstance(item.get("provider"), str)
+                        }
+                        published.pop(provider, None)
+                        published.update(current)
+                        self.usage.value = [
+                            published[item] for item in PROVIDERS if item in published
+                        ]
+                        self.usage.error = dict(errors)
+                        self.usage.updated_at = time.time()
             except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
                 errors[provider] = str(caught)
         with self.lock:

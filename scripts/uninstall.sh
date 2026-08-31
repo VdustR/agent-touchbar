@@ -6,7 +6,7 @@ BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
 COMMAND="$BIN_DIR/codexbar-touchbar"
 
 VENV_COMMAND="$INSTALL_ROOT/venv/bin/codexbar-touchbar"
-BTTCLI=/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli
+BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli}
 PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.plist"
 
 if [ -x "$COMMAND" ]; then
