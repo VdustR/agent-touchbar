@@ -97,7 +97,12 @@ class StateStore:
                         continue
                     provider = item.get("provider")
                     state = item.get("state")
-                    if provider in PROVIDERS and state in {"active", "idle"}:
+                    if (
+                        isinstance(provider, str)
+                        and isinstance(state, str)
+                        and provider in PROVIDERS
+                        and state in {"active", "idle"}
+                    ):
                         counts.setdefault(provider, {"active": 0, "idle": 0})[state] += 1
                 codex_sessions = [
                     item
@@ -133,7 +138,7 @@ class StateStore:
                     raise ValueError("CodexBar usage payload is not a list")
                 if any(
                     not isinstance(item, dict)
-                    or not isinstance(item.get("provider"), str)
+                    or item.get("provider") != provider
                     or not isinstance(item.get("usage"), dict)
                     for item in payload
                 ):

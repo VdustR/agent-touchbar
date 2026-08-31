@@ -67,6 +67,17 @@ class CoreTests(unittest.TestCase):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["claude"], {"active": 1, "idle": 1})
 
+    def test_session_refresh_ignores_non_string_states(self) -> None:
+        store = StateStore()
+        sessions = [
+            {"id": "invalid", "provider": "codex", "state": []},
+            {"id": "valid", "provider": "codex", "state": "active"},
+        ]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+            store._refresh_sessions()
+        self.assertEqual(store.session_counts["codex"], {"active": 1, "idle": 0})
+        self.assertFalse(store.sessions.refreshing)
+
     def test_usage_refresh_preserves_failed_provider_cache(self) -> None:
         store = StateStore()
         store.usage.value = [
@@ -120,6 +131,20 @@ class CoreTests(unittest.TestCase):
             store._refresh_usage()
         self.assertEqual(store.usage.value, [{"provider": "codex", "usage": {}}])
         self.assertIn("invalid shape", store.usage.error["codex"])
+
+    def test_usage_refresh_rejects_wrong_provider(self) -> None:
+        store = StateStore()
+        store.usage.value = [{"provider": "codex", "usage": {"primary": {}}}]
+
+        def response(*args, **kwargs):
+            provider = args[2]
+            if provider == "claude":
+                return [{"provider": "codex", "usage": {}}]
+            return [{"provider": provider, "usage": {}}]
+
+        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+            store._refresh_usage()
+        self.assertIn("claude", store.usage.error)
 
     def test_usage_refresh_publishes_codex_before_optional_providers(self) -> None:
         store = StateStore()

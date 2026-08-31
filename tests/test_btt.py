@@ -196,6 +196,21 @@ class BetterTouchToolTests(unittest.TestCase):
         self.assertIn(f"uuid={widget_uuid('Agent session 12')}", looked_up)
         self.assertIn(f"uuid={widget_uuid('Attention session')}", looked_up)
 
+    def test_install_fails_when_legacy_trigger_cannot_be_deleted(self) -> None:
+        with TemporaryDirectory() as temporary:
+            with (
+                patch("codexbar_touchbar.btt.data_dir", return_value=Path(temporary)),
+                patch("codexbar_touchbar.btt.run_cli") as run_cli,
+            ):
+                def result(command, *args, **kwargs):
+                    if command == "delete_trigger" and "E4F85058" in args[0]:
+                        raise subprocess.CalledProcessError(1, [command, *args])
+                    return subprocess.CompletedProcess([command, *args], 0, "{}", "")
+
+                run_cli.side_effect = result
+                with self.assertRaises(subprocess.CalledProcessError):
+                    install_widgets(1)
+
     def test_missing_slot_state_defaults_to_managing_all_slots(self) -> None:
         with patch("codexbar_touchbar.btt.slot_state_path", return_value=Path("/missing")):
             self.assertEqual(previous_slot_count(), 12)

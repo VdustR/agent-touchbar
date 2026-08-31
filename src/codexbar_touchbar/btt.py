@@ -275,7 +275,7 @@ def install_widgets(session_slots: int = 4) -> list[str]:
         if existing not in {"", "null", "{}", "[]"}:
             run_cli("delete_trigger", f"uuid={legacy_id}")
             results.append(f"delete_trigger: {legacy_name}")
-    run_cli("delete_trigger", "uuid=E4F85058-56B7-4DBD-9064-3C26F11B8C52", check=False)
+    run_cli("delete_trigger", "uuid=E4F85058-56B7-4DBD-9064-3C26F11B8C52")
     for index in range(session_slots, 12):
         name = f"Agent session {index + 1}"
         run_cli("delete_trigger", f"uuid={widget_uuid(name)}")
