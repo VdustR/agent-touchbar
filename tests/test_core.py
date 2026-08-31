@@ -32,6 +32,17 @@ class CoreTests(unittest.TestCase):
             store._refresh_sessions()
         self.assertEqual(store.sessions.value, [{"id": "codex", "provider": "codex"}])
 
+    def test_session_refresh_rejects_codex_sessions_without_string_ids(self) -> None:
+        store = StateStore()
+        sessions = [
+            {"provider": "codex", "state": "active"},
+            {"id": None, "provider": "codex", "state": "idle"},
+            {"id": "valid", "provider": "codex", "state": "active"},
+        ]
+        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value, [{"id": "valid", "provider": "codex", "state": "active"}])
+
     def test_session_refresh_counts_supported_states_for_each_provider(self) -> None:
         store = StateStore()
         sessions = [
@@ -70,6 +81,19 @@ class CoreTests(unittest.TestCase):
         with patch("codexbar_touchbar.core.run_codexbar", return_value=[]):
             store._refresh_usage()
         self.assertEqual(store.usage.value, [])
+
+    def test_usage_refresh_preserves_cache_and_reports_non_list_payload(self) -> None:
+        store = StateStore()
+        store.usage.value = [{"provider": "codex", "usage": {}}]
+
+        def response(*args, **kwargs):
+            provider = args[2]
+            return {} if provider == "codex" else []
+
+        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+            store._refresh_usage()
+        self.assertEqual(store.usage.value, [{"provider": "codex", "usage": {}}])
+        self.assertIn("not a list", store.usage.error["codex"])
 
     def test_usage_refresh_publishes_codex_before_optional_providers(self) -> None:
         store = StateStore()

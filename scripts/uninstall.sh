@@ -22,11 +22,8 @@ else
   rm -f "$PLIST"
   cleanup_failed=0
   if [ -x "$BTTCLI" ] && [ -x "$PYTHON_BIN" ]; then
-    while IFS= read -r trigger_id; do
-      if ! "$BTTCLI" delete_trigger "uuid=$trigger_id" >/dev/null 2>&1; then
-        cleanup_failed=1
-      fi
-    done < <("$PYTHON_BIN" - <<'PY'
+    trigger_file=$(mktemp)
+    if "$PYTHON_BIN" - >"$trigger_file" <<'PY'
 import uuid
 
 namespace = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
@@ -36,7 +33,16 @@ for name in names:
     print(str(uuid.uuid5(namespace, name)).upper())
 print("E4F85058-56B7-4DBD-9064-3C26F11B8C52")
 PY
-    )
+    then
+      while IFS= read -r trigger_id; do
+        if ! "$BTTCLI" delete_trigger "uuid=$trigger_id" >/dev/null 2>&1; then
+          cleanup_failed=1
+        fi
+      done < "$trigger_file"
+    else
+      cleanup_failed=1
+    fi
+    rm -f "$trigger_file"
   else
     cleanup_failed=1
   fi

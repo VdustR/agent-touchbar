@@ -99,7 +99,9 @@ class StateStore:
                 codex_sessions = [
                     item
                     for item in value
-                    if isinstance(item, dict) and item.get("provider") == "codex"
+                    if isinstance(item, dict)
+                    and item.get("provider") == "codex"
+                    and isinstance(item.get("id"), str)
                 ]
                 value = codex_sessions
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
@@ -124,26 +126,27 @@ class StateStore:
         for provider in PROVIDERS:
             try:
                 payload = run_codexbar("usage", "--provider", provider, "--format", "json")
-                if isinstance(payload, list):
-                    current.update(
-                        (item["provider"], item)
-                        for item in payload
+                if not isinstance(payload, list):
+                    raise ValueError("CodexBar usage payload is not a list")
+                current.update(
+                    (item["provider"], item)
+                    for item in payload
+                    if isinstance(item, dict) and isinstance(item.get("provider"), str)
+                )
+                with self.lock:
+                    published = {
+                        item["provider"]: item
+                        for item in self.usage.value
                         if isinstance(item, dict) and isinstance(item.get("provider"), str)
-                    )
-                    with self.lock:
-                        published = {
-                            item["provider"]: item
-                            for item in self.usage.value
-                            if isinstance(item, dict) and isinstance(item.get("provider"), str)
-                        }
-                        published.pop(provider, None)
-                        published.update(current)
-                        self.usage.value = [
-                            published[item] for item in PROVIDERS if item in published
-                        ]
-                        self.usage.error = dict(errors)
-                        self.usage.updated_at = time.monotonic()
-            except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as caught:
+                    }
+                    published.pop(provider, None)
+                    published.update(current)
+                    self.usage.value = [
+                        published[item] for item in PROVIDERS if item in published
+                    ]
+                    self.usage.error = dict(errors)
+                    self.usage.updated_at = time.monotonic()
+            except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
                 errors[provider] = str(caught)
                 with self.lock:
                     self.usage.error = dict(errors)
