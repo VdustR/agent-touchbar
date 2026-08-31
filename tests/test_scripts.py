@@ -14,7 +14,7 @@ class ScriptTests(unittest.TestCase):
         project = (repository / "pyproject.toml").read_text()
         self.assertIn("pyright src tests", workflow)
         self.assertIn("'.[dev]'", workflow)
-        self.assertIn('pyright==1.1.413', project)
+        self.assertIn('pyright==1.1.411', project)
 
     def test_fallback_uninstall_does_not_suppress_unexpected_bootout_failures(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
