@@ -37,6 +37,67 @@ struct TypographySettings: Equatable {
     }
 }
 
+enum LauncherContent: String {
+    case icon
+    case text
+    case iconAndText
+}
+
+struct LauncherAppearance: Equatable {
+    static let defaultSymbol = "terminal.fill"
+    static let defaultText = "AI"
+
+    let content: LauncherContent
+    let text: String
+    let symbol: String
+    let iconPath: String?
+    let colorHex: String?
+
+    static func load(defaults: UserDefaults = .standard) -> LauncherAppearance {
+        let content = defaults.string(forKey: "launcherContent")
+            .flatMap(LauncherContent.init(rawValue:)) ?? .icon
+        let text = normalized(defaults.string(forKey: "launcherText"), fallback: defaultText)
+        let symbol = normalized(defaults.string(forKey: "launcherSymbol"), fallback: defaultSymbol)
+        let iconPath = defaults.string(forKey: "launcherIconPath")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let color = defaults.string(forKey: "launcherColor")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return LauncherAppearance(
+            content: content,
+            text: String(text.prefix(12)),
+            symbol: symbol,
+            iconPath: iconPath?.isEmpty == false ? iconPath : nil,
+            colorHex: color?.isEmpty == false ? color : nil
+        )
+    }
+
+    var bezelColor: NSColor {
+        guard let colorHex else { return .systemIndigo }
+        let value = colorHex.hasPrefix("#") ? String(colorHex.dropFirst()) : colorHex
+        guard value.count == 6, let rgb = UInt64(value, radix: 16) else { return .systemIndigo }
+        return NSColor(
+            calibratedRed: CGFloat((rgb >> 16) & 0xff) / 255,
+            green: CGFloat((rgb >> 8) & 0xff) / 255,
+            blue: CGFloat(rgb & 0xff) / 255,
+            alpha: 1
+        )
+    }
+
+    var image: NSImage? {
+        let custom = iconPath
+            .map { NSString(string: $0).expandingTildeInPath }
+            .flatMap(NSImage.init(contentsOfFile:))
+        let image = custom
+            ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: Self.defaultSymbol, accessibilityDescription: nil)
+        image?.isTemplate = true
+        return image
+    }
+
+    private static func normalized(_ value: String?, fallback: String) -> String {
+        let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return normalized.isEmpty ? fallback : normalized
+    }
+}
+
 struct RendererState: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let generatedAt: String

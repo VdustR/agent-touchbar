@@ -15,7 +15,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var buttons: [String: ActionButton] = [:]
     private var reconciler = ItemReconciler()
     private var controlStripItem: NSCustomTouchBarItem?
+    private var launcherButton: NSButton?
     private(set) var typography = TypographySettings.load()
+    private(set) var launcherAppearance = LauncherAppearance.load()
 
     init(bridge: BridgeClient) {
         self.bridge = bridge
@@ -64,10 +66,11 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private func installControlStrip() {
         guard TouchBarPrivateAPI.shared.supportsControlStrip else { return }
         let item = NSCustomTouchBarItem(identifier: .nativeControlStrip)
-        let button = NSButton(title: "AI", target: self, action: #selector(showTouchBar))
-        button.bezelColor = NSColor.systemIndigo
+        let button = NSButton(title: "", target: self, action: #selector(showTouchBar))
         button.toolTip = "Coding agent tasks and quota"
         button.setAccessibilityLabel("Open coding agent tasks and quota")
+        launcherButton = button
+        configureLauncherButton()
         item.view = button
         item.customizationLabel = "Coding agents"
         controlStripItem = item
@@ -87,6 +90,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     func update(_ state: RendererState) {
         typography = TypographySettings.load()
+        launcherAppearance = LauncherAppearance.load()
+        configureLauncherButton()
         let offset = scrollView.contentView.bounds.origin
         let result = reconciler.reconcile(state.items)
 
@@ -115,6 +120,25 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         viewportWidthConstraint?.constant = min(max(ceil(contentWidth), 96), 1000)
         scrollView.contentView.scroll(to: offset)
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    private func configureLauncherButton() {
+        guard let button = launcherButton else { return }
+        button.bezelColor = launcherAppearance.bezelColor
+        switch launcherAppearance.content {
+        case .icon:
+            button.title = ""
+            button.image = launcherAppearance.image
+            button.imagePosition = .imageOnly
+        case .text:
+            button.title = launcherAppearance.text
+            button.image = nil
+            button.imagePosition = .noImage
+        case .iconAndText:
+            button.title = launcherAppearance.text
+            button.image = launcherAppearance.image
+            button.imagePosition = .imageLeading
+        }
     }
 
     private func configure(_ button: ActionButton, for item: RendererItem) {

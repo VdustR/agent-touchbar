@@ -3,6 +3,45 @@ import XCTest
 @testable import CodexTouchBarHost
 
 final class ModelsTests: XCTestCase {
+    func testLauncherAppearanceLoadsCombinedContentAndColor() throws {
+        let suiteName = "LauncherAppearanceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("iconAndText", forKey: "launcherContent")
+        defaults.set("  Agents  ", forKey: "launcherText")
+        defaults.set("rectangle.3.group.fill", forKey: "launcherSymbol")
+        defaults.set("~/icons/agent.png", forKey: "launcherIconPath")
+        defaults.set("#336699", forKey: "launcherColor")
+
+        let appearance = LauncherAppearance.load(defaults: defaults)
+        let color = appearance.bezelColor
+
+        XCTAssertEqual(appearance.content, .iconAndText)
+        XCTAssertEqual(appearance.text, "Agents")
+        XCTAssertEqual(appearance.symbol, "rectangle.3.group.fill")
+        XCTAssertEqual(appearance.iconPath, "~/icons/agent.png")
+        XCTAssertEqual(color.redComponent, 0.2, accuracy: 0.001)
+        XCTAssertEqual(color.greenComponent, 0.4, accuracy: 0.001)
+        XCTAssertEqual(color.blueComponent, 0.6, accuracy: 0.001)
+    }
+
+    func testLauncherAppearanceFallsBackToCompactTerminalIcon() throws {
+        let suiteName = "LauncherAppearanceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("unsupported", forKey: "launcherContent")
+        defaults.set("Missing Symbol \(UUID().uuidString)", forKey: "launcherSymbol")
+        defaults.set("not-a-color", forKey: "launcherColor")
+
+        let appearance = LauncherAppearance.load(defaults: defaults)
+
+        XCTAssertEqual(appearance.content, .icon)
+        XCTAssertEqual(appearance.text, LauncherAppearance.defaultText)
+        XCTAssertNil(appearance.iconPath)
+        XCTAssertNotNil(appearance.image)
+        XCTAssertEqual(appearance.bezelColor, NSColor.systemIndigo)
+    }
+
     func testTypographySettingsLoadsConfiguredFamilyAndSafeSize() throws {
         let suiteName = "TypographySettingsTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
