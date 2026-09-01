@@ -15,7 +15,7 @@ RENDERER_APP="$INSTALL_ROOT/Agent Touch Bar.app"
 
 if ! renderer_output=$(/bin/launchctl bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1); then
   case "$renderer_output" in
-    *"Could not find specified service"*|*"No such process"*) ;;
+    *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
     *) echo "$renderer_output" >&2; exit 1 ;;
   esac
 fi
@@ -29,7 +29,7 @@ elif [ -x "$VENV_COMMAND" ]; then
 else
   if ! bootout_output=$(/bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>&1); then
     case "$bootout_output" in
-      *"Could not find specified service"*|*"No such process"*) ;;
+      *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
       *)
         echo "$bootout_output" >&2
         exit 1

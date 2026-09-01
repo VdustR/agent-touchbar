@@ -23,6 +23,7 @@ class ScriptTests(unittest.TestCase):
 
     def test_fallback_uninstall_does_not_suppress_unexpected_bootout_failures(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
+        self.assertIn("Could not find service", script)
         self.assertIn("Could not find specified service", script)
         self.assertIn("No such process", script)
         self.assertNotIn(
