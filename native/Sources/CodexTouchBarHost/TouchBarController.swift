@@ -15,6 +15,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var buttons: [String: ActionButton] = [:]
     private var reconciler = ItemReconciler()
     private var controlStripItem: NSCustomTouchBarItem?
+    private(set) var typography = TypographySettings.load()
 
     init(bridge: BridgeClient) {
         self.bridge = bridge
@@ -85,6 +86,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     }
 
     func update(_ state: RendererState) {
+        typography = TypographySettings.load()
         let offset = scrollView.contentView.bounds.origin
         let result = reconciler.reconcile(state.items)
 
@@ -125,7 +127,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         button.lineBreakMode = .byTruncatingTail
         button.cell?.wraps = false
         button.cell?.usesSingleLineMode = true
-        let font = NSFont.systemFont(ofSize: 11, weight: item.state == "active" ? .semibold : .regular)
+        let font = typography.font(active: item.state == "active")
         button.font = font
         button.image = appIcon(provider: item.iconProvider)
         button.imagePosition = .imageLeading

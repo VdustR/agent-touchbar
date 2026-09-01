@@ -3,6 +3,33 @@ import XCTest
 @testable import CodexTouchBarHost
 
 final class ModelsTests: XCTestCase {
+    func testTypographySettingsLoadsConfiguredFamilyAndSafeSize() throws {
+        let suiteName = "TypographySettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("  Helvetica  ", forKey: "fontName")
+        defaults.set(13, forKey: "fontSize")
+
+        let typography = TypographySettings.load(defaults: defaults)
+
+        XCTAssertEqual(typography.fontName, "Helvetica")
+        XCTAssertEqual(typography.fontSize, 13)
+        XCTAssertEqual(typography.font(active: false).pointSize, 13)
+    }
+
+    func testTypographySettingsRejectsUnsafeSizeAndMissingFont() throws {
+        let suiteName = "TypographySettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("Missing Font \(UUID().uuidString)", forKey: "fontName")
+        defaults.set(40, forKey: "fontSize")
+
+        let typography = TypographySettings.load(defaults: defaults)
+
+        XCTAssertEqual(typography.fontSize, TypographySettings.defaultSize)
+        XCTAssertEqual(typography.font(active: false).familyName, NSFont.systemFont(ofSize: 11).familyName)
+    }
+
     func testDecodesVersionedRendererState() throws {
         let data = """
         {"schemaVersion":1,"generatedAt":"now","items":[{"id":"task:one","kind":"task","provider":"codex","label":"One","state":"active","iconProvider":"codex","action":{"type":"focusTask","taskId":"one"}}]}

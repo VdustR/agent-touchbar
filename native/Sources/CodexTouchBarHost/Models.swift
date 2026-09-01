@@ -1,6 +1,42 @@
 import AppKit
 import Foundation
 
+struct TypographySettings: Equatable {
+    static let defaultSize: CGFloat = 11
+
+    let fontName: String?
+    let fontSize: CGFloat
+
+    static func load(defaults: UserDefaults = .standard) -> TypographySettings {
+        let configuredName = defaults.string(forKey: "fontName")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let configuredSize = defaults.double(forKey: "fontSize")
+        return TypographySettings(
+            fontName: configuredName?.isEmpty == false ? configuredName : nil,
+            fontSize: (8...18).contains(configuredSize) ? configuredSize : defaultSize
+        )
+    }
+
+    func font(active: Bool) -> NSFont {
+        guard let fontName, let base = customFont(named: fontName) else {
+            return NSFont.systemFont(ofSize: fontSize, weight: active ? .semibold : .regular)
+        }
+        guard active else { return base }
+        let weighted = NSFontManager.shared.convertWeight(true, of: base)
+        return weighted.familyName == base.familyName ? weighted : base
+    }
+
+    private func customFont(named name: String) -> NSFont? {
+        if let exact = NSFont(name: name, size: fontSize) { return exact }
+        guard let members = NSFontManager.shared.availableMembers(ofFontFamily: name) else { return nil }
+        let regular = members.first { member in
+            guard member.count > 3, let traits = member[3] as? UInt else { return false }
+            return NSFontTraitMask(rawValue: traits).intersection([.boldFontMask, .italicFontMask]).isEmpty
+        } ?? members.first
+        guard let postScriptName = regular?.first as? String else { return nil }
+        return NSFont(name: postScriptName, size: fontSize)
+    }
+}
+
 struct RendererState: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let generatedAt: String

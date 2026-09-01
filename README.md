@@ -86,6 +86,25 @@ Verify the installation:
 curl --fail http://127.0.0.1:4317/healthz
 ```
 
+### Typography
+
+The renderer uses the macOS system font at 11 pt by default. Set any installed
+font family or PostScript name through the renderer's user defaults, then wait
+up to one second for the Touch Bar to refresh:
+
+```bash
+defaults write com.vdustr.codexbar-touchbar.renderer fontName -string "Your Font Family"
+defaults write com.vdustr.codexbar-touchbar.renderer fontSize -float 11
+```
+
+Supported sizes are 8–18 pt. An unavailable font or out-of-range size falls
+back to the default system typography. Restore both defaults with:
+
+```bash
+defaults delete com.vdustr.codexbar-touchbar.renderer fontName
+defaults delete com.vdustr.codexbar-touchbar.renderer fontSize
+```
+
 To update, pull the latest `main` branch and run `./scripts/install.sh` again.
 
 ## Uninstall
