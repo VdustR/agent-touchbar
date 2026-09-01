@@ -105,6 +105,25 @@ defaults delete com.vdustr.codexbar-touchbar.renderer fontName
 defaults delete com.vdustr.codexbar-touchbar.renderer fontSize
 ```
 
+### Launcher appearance
+
+The Control Strip launcher defaults to a compact `terminal.fill` SF Symbol on
+the system indigo background. Choose `icon`, `text`, or `iconAndText`, and set
+an installed SF Symbol or local PNG, PDF, TIFF, or ICNS file, a label of up to
+12 characters, and a six-digit RGB background color. A local icon takes
+precedence over the SF Symbol and is rendered as a monochrome template:
+
+```bash
+defaults write com.vdustr.codexbar-touchbar.renderer launcherContent -string "iconAndText"
+defaults write com.vdustr.codexbar-touchbar.renderer launcherSymbol -string "terminal.fill"
+defaults write com.vdustr.codexbar-touchbar.renderer launcherIconPath -string "$HOME/Pictures/agent-icon.png"
+defaults write com.vdustr.codexbar-touchbar.renderer launcherText -string "Agents"
+defaults write com.vdustr.codexbar-touchbar.renderer launcherColor -string "#4F46E5"
+```
+
+Changes refresh within one second. Invalid values fall back to the compact
+terminal icon and system indigo. Delete any key above to restore its default.
+
 To update, pull the latest `main` branch and run `./scripts/install.sh` again.
 
 ## Uninstall

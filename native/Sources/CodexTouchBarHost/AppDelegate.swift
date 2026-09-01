@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var heartbeatTimer: Timer?
     private var lastItems: [RendererItem]?
     private var lastTypography = TypographySettings.load()
+    private var lastLauncherAppearance = LauncherAppearance.load()
     private var refreshInFlight = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -79,10 +80,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch result {
                 case .success(let state):
                     let typography = TypographySettings.load()
-                    if state.items != self.lastItems || typography != self.lastTypography {
+                    let launcherAppearance = LauncherAppearance.load()
+                    if state.items != self.lastItems
+                        || typography != self.lastTypography
+                        || launcherAppearance != self.lastLauncherAppearance {
                         self.touchBarController.update(state)
                         self.lastItems = state.items
                         self.lastTypography = typography
+                        self.lastLauncherAppearance = launcherAppearance
                     }
                     self.setStatus("Native renderer · \(state.items.count) items")
                 case .failure:
