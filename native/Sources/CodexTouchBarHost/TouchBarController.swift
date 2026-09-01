@@ -14,7 +14,6 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var buttons: [String: ActionButton] = [:]
     private var reconciler = ItemReconciler()
     private var controlStripItem: NSCustomTouchBarItem?
-    private(set) var isPresented = false
 
     init(bridge: BridgeClient) {
         self.bridge = bridge
@@ -59,7 +58,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private func installControlStrip() {
         guard TouchBarPrivateAPI.shared.supportsControlStrip else { return }
         let item = NSCustomTouchBarItem(identifier: .nativeControlStrip)
-        let button = NSButton(title: "AI", target: self, action: #selector(toggleTouchBar))
+        let button = NSButton(title: "AI", target: self, action: #selector(showTouchBar))
         button.bezelColor = NSColor.systemIndigo
         button.toolTip = "Coding agent tasks and quota"
         button.setAccessibilityLabel("Open coding agent tasks and quota")
@@ -174,16 +173,11 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
     }
 
-    @objc func toggleTouchBar() {
-        if isPresented {
-            TouchBarPrivateAPI.shared.dismiss(touchBar)
-            isPresented = false
-        } else {
-            isPresented = TouchBarPrivateAPI.shared.present(
-                touchBar,
-                trayIdentifier: .nativeControlStrip
-            )
-        }
+    @objc func showTouchBar() {
+        TouchBarPrivateAPI.shared.present(
+            touchBar,
+            trayIdentifier: .nativeControlStrip
+        )
     }
 }
 

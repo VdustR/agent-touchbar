@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = touchBarController
         refresh()
         if ProcessInfo.processInfo.environment["CODEXBAR_TOUCHBAR_PRESENT_ON_LAUNCH"] == "1" {
-            touchBarController.toggleTouchBar()
+            touchBarController.showTouchBar()
         }
         refreshTimer = Timer.scheduledTimer(
             timeInterval: 1,
@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showTouchBar() {
-        touchBarController.toggleTouchBar()
+        touchBarController.showTouchBar()
     }
 
 }
