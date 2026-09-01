@@ -16,6 +16,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("'.[dev]'", workflow)
         self.assertIn('pyright==1.1.411', project)
 
+    def test_setup_check_requires_swift_5_10(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "skills" / "setup-codexbar-touchbar" / "scripts" / "check.sh").read_text()
+        self.assertIn('SWIFT_MINOR" -ge 10', script)
+        self.assertIn("missing: swift 5.10 or newer", script)
+
     def test_fallback_uninstall_does_not_suppress_unexpected_bootout_failures(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
         self.assertIn("Could not find specified service", script)
@@ -48,6 +53,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('exit "$failure_status"', script)
         self.assertIn('mv "$RENDERER_PLIST" "$RENDERER_PLIST_BACKUP"', script)
         self.assertIn('PYTHON_BIN="$VENV_BACKUP/${PYTHON_BIN#"$VENV"/}"', script)
+        self.assertIn("trap 'rollback_install 130' INT", script)
+        self.assertIn("trap 'rollback_install 143' TERM", script)
         self.assertLess(script.index('codexbar-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('codexbar-touchbar\" doctor')))
 
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:

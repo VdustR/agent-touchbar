@@ -23,7 +23,16 @@ fi
 
 SWIFT_BIN=$(command -v swift || true)
 if [ -x "$SWIFT_BIN" ]; then
-  printf 'ok: swift (%s)\n' "$SWIFT_BIN"
+  SWIFT_VERSION=$("$SWIFT_BIN" --version | awk '{ for (i = 1; i <= NF; i++) if ($i == "version") { print $(i + 1); exit } }')
+  SWIFT_MAJOR=${SWIFT_VERSION%%.*}
+  SWIFT_REMAINDER=${SWIFT_VERSION#*.}
+  SWIFT_MINOR=${SWIFT_REMAINDER%%.*}
+  if [ -n "$SWIFT_VERSION" ] && { [ "$SWIFT_MAJOR" -gt 5 ] || { [ "$SWIFT_MAJOR" -eq 5 ] && [ "$SWIFT_MINOR" -ge 10 ]; }; }; then
+    printf 'ok: swift %s (%s)\n' "$SWIFT_VERSION" "$SWIFT_BIN"
+  else
+    printf 'missing: swift 5.10 or newer (found %s)\n' "${SWIFT_VERSION:-unknown}"
+    missing=1
+  fi
 else
   printf 'missing: swift\n'
   missing=1

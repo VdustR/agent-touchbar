@@ -17,7 +17,8 @@ HAD_RENDERER_PLIST=0
 
 rollback_install() {
   failure_status=$?
-  trap - ERR
+  if [ -n "${1:-}" ]; then failure_status=$1; fi
+  trap - ERR INT TERM HUP
   set +e
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" >/dev/null 2>&1
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar.renderer" >/dev/null 2>&1
@@ -88,6 +89,9 @@ mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 rm -rf "$VENV_BACKUP" "$APP_BACKUP"
 rm -f "$RENDERER_PLIST_BACKUP"
 trap rollback_install ERR
+trap 'rollback_install 130' INT
+trap 'rollback_install 143' TERM
+trap 'rollback_install 129' HUP
 if [ -d "$VENV" ]; then
   HAD_VENV=1
   mv "$VENV" "$VENV_BACKUP"
@@ -109,7 +113,7 @@ fi
 ln -sfn "$VENV/bin/codexbar-touchbar" "$BIN_DIR/codexbar-touchbar"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" install "$@"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" doctor
-trap - ERR
+trap - ERR INT TERM HUP
 rm -rf "$VENV_BACKUP" "$APP_BACKUP"
 rm -f "$RENDERER_PLIST_BACKUP"
 "$REPO_ROOT/scripts/remove-legacy-btt.sh"
