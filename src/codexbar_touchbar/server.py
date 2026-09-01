@@ -131,6 +131,7 @@ def handler_factory(
                 self.send_json(renderer_snapshot(store.snapshot()))
             elif path == "/healthz":
                 snapshot = store.snapshot()
+                native_renderer = native_tracker.snapshot()
                 providers = {
                     item.get("provider")
                     for item in snapshot["usage"]
@@ -140,6 +141,7 @@ def handler_factory(
                     not snapshot["errors"]["sessions"]
                     and "codex" not in snapshot["errors"]["usage"]
                     and "codex" in providers
+                    and native_renderer["alive"] is True
                 )
                 status = HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE
                 self.send_json(
@@ -147,7 +149,7 @@ def handler_factory(
                         "service": "codexbar-touchbar",
                         "ok": status == HTTPStatus.OK,
                         "errors": snapshot["errors"],
-                        "nativeRenderer": native_tracker.snapshot(),
+                        "nativeRenderer": native_renderer,
                         "lastAction": tracker.snapshot(),
                     },
                     status,

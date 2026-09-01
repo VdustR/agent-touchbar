@@ -8,7 +8,13 @@ if CommandLine.arguments.contains("--self-test") {
     do {
         let state = try RendererContract.decode(fixture)
         let capabilities = await MainActor.run { TouchBarPrivateAPI.shared.capabilities }
-        print("{\"ok\":true,\"items\":\(state.items.count),\"capabilities\":\(capabilities)}")
+        let output: [String: Any] = [
+            "ok": true,
+            "items": state.items.count,
+            "capabilities": capabilities,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys])
+        print(String(decoding: data, as: UTF8.self))
         exit(0)
     } catch {
         fputs("self-test failed: \(error)\n", stderr)

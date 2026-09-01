@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var refreshTimer: Timer?
     private var heartbeatTimer: Timer?
     private var lastItems: [RendererItem]?
+    private var refreshInFlight = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -71,9 +72,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refresh() {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
         bridge.fetchState { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.refreshInFlight = false
                 switch result {
                 case .success(let state):
                     if state.items != self.lastItems {

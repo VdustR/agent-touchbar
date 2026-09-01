@@ -28,6 +28,7 @@ class ServerTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.tracker = ActionTracker()
         cls.renderer_tracker = RendererTracker()
+        cls.renderer_tracker.heartbeat({"controlStrip": True, "systemModal": True})
         cls.store = FakeStore()
         cls.server = ThreadingHTTPServer(
             ("127.0.0.1", 0),
@@ -65,6 +66,26 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(body["service"], "codexbar-touchbar")
         self.assertTrue(body["ok"])
         self.assertIsNone(body["lastAction"])
+
+    def test_health_requires_live_native_renderer(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), handler_factory(self.store, renderer_tracker=RendererTracker())
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+        try:
+            connection.request("GET", "/healthz")
+            response = connection.getresponse()
+            body = json.loads(response.read())
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join()
+        self.assertEqual(response.status, 503)
+        self.assertFalse(body["ok"])
+        self.assertFalse(body["nativeRenderer"]["alive"])
 
     def test_native_state_contract_is_versioned_and_ordered(self) -> None:
         status, body = self.request("GET", "/api/v1/state")
