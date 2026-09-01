@@ -4,6 +4,8 @@ Agent Touch Bar is a source-only native macOS Touch Bar dashboard for Codex,
 Claude Code, and Antigravity sessions, usage limits, and app focus.
 BetterTouchTool is not required.
 
+![Agent Touch Bar showing fictional usage limits and session names](docs/assets/agent-touchbar.png)
+
 Session names come from the corresponding desktop UI sources. CodexBar remains
 isolated behind the quota adapter and runtime-state enrichment. The integration
 does not read transcript contents, browser cookies, credentials, or account
