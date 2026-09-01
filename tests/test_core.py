@@ -430,6 +430,17 @@ class CoreTests(unittest.TestCase):
         self.assertNotIn("transcript", encoded)
         self.assertNotIn("private", encoded)
 
+    def test_renderer_preserves_counts_without_provider_usage(self) -> None:
+        result = renderer_snapshot({
+            "generatedAt": "now",
+            "usage": [],
+            "sessions": [],
+            "sessionCounts": {"claude": {"active": 2, "idle": 3}},
+        })
+        claude = next(item for item in result["items"] if item["id"] == "quota:claude")
+        self.assertEqual(claude["label"], "2 active · 3 idle")
+        self.assertEqual(claude["sessionCounts"], {"active": 2, "idle": 3})
+
 
 if __name__ == "__main__":
     unittest.main()

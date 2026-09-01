@@ -30,6 +30,13 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("Could not find specified service", script)
         self.assertNotIn('bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true', script)
 
+    def test_installer_stages_renderer_before_replacing_bridge(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
+        self.assertLess(
+            script.index('"$REPO_ROOT/scripts/install-renderer.sh"'),
+            script.index('"$VENV/bin/python" -m pip install'),
+        )
+
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
         self.assertIn('rm -rf "$INSTALL_ROOT/venv"', script)

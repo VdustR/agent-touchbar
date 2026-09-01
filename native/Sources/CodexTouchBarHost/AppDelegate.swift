@@ -61,12 +61,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(showTouchBar),
             keyEquivalent: ""
         ))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(
-            title: "Quit",
-            action: #selector(quit),
-            keyEquivalent: "q"
-        ))
         item.menu = menu
         statusItem = item
     }
@@ -117,7 +111,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         touchBarController.toggleTouchBar()
     }
 
-    @objc private func quit() {
-        NSApp.terminate(nil)
-    }
 }

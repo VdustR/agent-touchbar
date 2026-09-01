@@ -33,12 +33,12 @@ fi
   exit 1
 }
 
+"$REPO_ROOT/scripts/install-renderer.sh"
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 "$PYTHON_BIN" -m venv "$VENV"
 "$VENV/bin/python" -m pip install --disable-pip-version-check --quiet --upgrade "$REPO_ROOT"
 ln -sfn "$VENV/bin/codexbar-touchbar" "$BIN_DIR/codexbar-touchbar"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" install "$@"
-"$REPO_ROOT/scripts/install-renderer.sh"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" doctor
 "$REPO_ROOT/scripts/remove-legacy-btt.sh"
 

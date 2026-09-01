@@ -424,7 +424,7 @@ def renderer_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
             None,
         )
         windows = data.get("windows", []) if isinstance(data, dict) else []
-        counts = data.get("sessionCounts") if isinstance(data, dict) else None
+        counts = snapshot.get("sessionCounts", {}).get(provider)
         parts: list[str] = []
         remaining: list[float] = []
         for window in windows:

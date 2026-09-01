@@ -3,11 +3,14 @@ from __future__ import annotations
 import plistlib
 import subprocess
 import unittest
+from io import BytesIO
+from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from urllib.error import HTTPError
 
-from codexbar_touchbar.cli import doctor, install_service, launch_agent_loaded, main, stop_service, uninstall_service
+from codexbar_touchbar.cli import doctor, install_service, launch_agent_loaded, main, native_renderer_is_healthy, stop_service, uninstall_service
 
 
 class CliTests(unittest.TestCase):
@@ -113,6 +116,17 @@ class CliTests(unittest.TestCase):
 
     def test_doctor_accepts_complete_native_install(self) -> None:
         self.assertEqual(self.doctor_result(True), 0)
+
+    def test_renderer_health_reads_liveness_from_aggregate_503(self) -> None:
+        error = HTTPError(
+            "http://127.0.0.1:4317/healthz",
+            503,
+            "unhealthy",
+            Message(),
+            BytesIO(b'{"ok":false,"nativeRenderer":{"alive":true}}'),
+        )
+        with patch("codexbar_touchbar.cli.urllib.request.urlopen", side_effect=error):
+            self.assertTrue(native_renderer_is_healthy())
 
     @patch("codexbar_touchbar.cli.subprocess.run")
     def test_uninstall_boots_out_loaded_label_without_plist(self, run) -> None:

@@ -171,10 +171,19 @@ def native_renderer_is_healthy() -> bool:
         try:
             with urllib.request.urlopen("http://127.0.0.1:4317/healthz", timeout=0.5) as response:
                 payload = json.loads(response.read())
-            renderer = payload.get("nativeRenderer", {}) if isinstance(payload, dict) else {}
-            if response.status == 200 and renderer.get("alive") is True:
-                return True
+        except urllib.error.HTTPError as response:
+            try:
+                payload = json.loads(response.read())
+            except json.JSONDecodeError:
+                payload = None
+            finally:
+                response.close()
         except (OSError, urllib.error.URLError, json.JSONDecodeError):
+            payload = None
+        renderer = payload.get("nativeRenderer", {}) if isinstance(payload, dict) else {}
+        if renderer.get("alive") is True:
+            return True
+        if payload is None:
             pass
         time.sleep(0.25)
     return False
