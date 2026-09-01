@@ -6,7 +6,7 @@ description: Build, install, update, diagnose, or uninstall the source-only nati
 # Set Up Agent Touch Bar
 
 Operate from the repository root on macOS. The integration requires CodexBar,
-Swift 5.10, and Python 3.11 or newer. It does not require BetterTouchTool.
+Swift 5.10, and Python 3.11 or newer.
 
 ## Install or update
 
@@ -42,5 +42,5 @@ returns. Do not infer approval, error, completion, or attention from idle time.
 ## Uninstall
 
 Run `./scripts/uninstall.sh`. It removes both LaunchAgents, the native app, the
-command symlink, and any legacy managed BetterTouchTool widgets. It retains
-runtime logs and reports their location.
+command symlink, and the isolated Python environment. It retains runtime logs
+and reports their location.

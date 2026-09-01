@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import os
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -87,38 +84,6 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('rm -f "$INSTALL_ROOT/install-transaction.committed"', script)
         self.assertIn('DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
         self.assertIn('remain at: $DATA_DIR', script)
-
-    def test_fallback_uninstall_reports_uuid_generator_failure(self) -> None:
-        repository = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            broken_python = root / "broken-python"
-            bttcli = root / "bttcli"
-            launchctl = root / "launchctl"
-            broken_python.write_text("#!/bin/sh\nexit 9\n")
-            bttcli.write_text("#!/bin/sh\nexit 0\n")
-            launchctl.write_text("#!/bin/sh\nexit 3\n")
-            broken_python.chmod(0o755)
-            bttcli.chmod(0o755)
-            launchctl.chmod(0o755)
-            environment = {
-                **os.environ,
-                "HOME": str(root / "home"),
-                "AGENT_TOUCHBAR_INSTALL_ROOT": str(root / "missing-install"),
-                "AGENT_TOUCHBAR_BIN_DIR": str(root / "missing-bin"),
-                "AGENT_TOUCHBAR_PYTHON": str(broken_python),
-                "AGENT_TOUCHBAR_BTTCLI": str(bttcli),
-                "AGENT_TOUCHBAR_LAUNCHCTL": str(launchctl),
-            }
-            result = subprocess.run(
-                ["/bin/bash", str(repository / "scripts" / "uninstall.sh")],
-                capture_output=True,
-                text=True,
-                env=environment,
-            )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotEqual(result.returncode, 0)
-
 
 if __name__ == "__main__":
     unittest.main()

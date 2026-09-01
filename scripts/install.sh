@@ -186,6 +186,5 @@ rm -rf "$VENV_BACKUP" "$APP_BACKUP"
 rm -f "$RENDERER_PLIST_BACKUP" "$COMMIT_MARKER"
 rm -f "$LEGACY_COMMAND" "$LEGACY_BRIDGE_PLIST" "$LEGACY_RENDERER_PLIST"
 rm -rf "$LEGACY_INSTALL_ROOT"
-"$REPO_ROOT/scripts/remove-legacy-btt.sh"
 
 echo "Installed agent-touchbar at $BIN_DIR/agent-touchbar"
