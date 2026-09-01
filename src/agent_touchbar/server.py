@@ -22,6 +22,11 @@ class StateSource(Protocol):
     def focus_session(self, session_id: str) -> None: ...
 
 
+class RefreshingState(StateSource, Protocol):
+    def refresh(self) -> None: ...
+    def wait_for_session_data(self) -> None: ...
+
+
 class ActionTracker:
     """Keep a privacy-minimized record of the latest Touch Bar action."""
 
@@ -243,27 +248,41 @@ def handler_factory(
     return Handler
 
 
-def serve(host: str, port: int, store: StateStore | None = None) -> None:
+def create_server(host: str, port: int, store: StateSource) -> ThreadingHTTPServer:
     if host not in {"127.0.0.1", "::1", "localhost"}:
         raise ValueError("The bridge only permits a loopback host")
-    state = store or StateStore()
-    state.wait_for_initial_data()
-    def update_loop() -> None:
-        retry_delay = 0.25
-        while True:
-            try:
-                state.refresh()
-                state.wait_for_session_data()
-                retry_delay = 0.25
-            except (OSError, subprocess.SubprocessError, ValueError) as error:
-                retry_delay = min(max(retry_delay * 2, 1.0), 8.0)
-            time.sleep(retry_delay)
-
-    threading.Thread(target=update_loop, daemon=True, name="state-refresh").start()
     server_type = ThreadingHTTPServer
     if host == "::1":
         class IPv6ThreadingHTTPServer(ThreadingHTTPServer):
             address_family = socket.AF_INET6
 
         server_type = IPv6ThreadingHTTPServer
-    server_type((host, port), handler_factory(state)).serve_forever()
+    return server_type((host, port), handler_factory(store))
+
+
+def start_refresh_loop(
+    state: RefreshingState, stop_event: threading.Event | None = None
+) -> threading.Thread:
+    stopped = stop_event or threading.Event()
+
+    def update_loop() -> None:
+        retry_delay = 0.25
+        while not stopped.is_set():
+            try:
+                state.refresh()
+                state.wait_for_session_data()
+                retry_delay = 0.25
+            except (OSError, subprocess.SubprocessError, ValueError):
+                retry_delay = min(max(retry_delay * 2, 1.0), 8.0)
+            stopped.wait(retry_delay)
+
+    thread = threading.Thread(target=update_loop, daemon=True, name="state-refresh")
+    thread.start()
+    return thread
+
+
+def serve(host: str, port: int, store: StateStore | None = None) -> None:
+    state = store or StateStore()
+    server = create_server(host, port, state)
+    start_refresh_loop(state)
+    server.serve_forever()

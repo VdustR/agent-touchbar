@@ -8,7 +8,14 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
-from agent_touchbar.server import ActionTracker, RendererTracker, handler_factory, task_fingerprint
+from agent_touchbar.server import (
+    ActionTracker,
+    RendererTracker,
+    create_server,
+    handler_factory,
+    start_refresh_loop,
+    task_fingerprint,
+)
 
 
 class FakeStore:
@@ -95,6 +102,41 @@ class ServerTests(unittest.TestCase):
             [item["id"] for item in body["items"]],
             ["quota:codex", "quota:claude", "quota:antigravity"],
         )
+
+    def test_state_endpoint_is_reachable_while_initial_refresh_is_blocked(self) -> None:
+        refresh_started = threading.Event()
+        release_refresh = threading.Event()
+        stop_refresh = threading.Event()
+
+        class SlowStore(FakeStore):
+            def refresh(self) -> None:
+                refresh_started.set()
+                release_refresh.wait(2)
+
+            def wait_for_session_data(self) -> None:
+                return
+
+        store = SlowStore()
+        server = create_server("127.0.0.1", 0, store)
+        refresh_thread = start_refresh_loop(store, stop_refresh)
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        self.assertTrue(refresh_started.wait(1))
+        connection = HTTPConnection("127.0.0.1", server.server_address[1], timeout=1)
+        try:
+            connection.request("GET", "/api/v1/state")
+            response = connection.getresponse()
+            body = json.loads(response.read())
+        finally:
+            connection.close()
+            release_refresh.set()
+            stop_refresh.set()
+            server.shutdown()
+            server.server_close()
+            server_thread.join()
+            refresh_thread.join()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["schemaVersion"], 1)
 
     def test_renderer_heartbeat_reports_capabilities_without_identity(self) -> None:
         status, body = self.request(
