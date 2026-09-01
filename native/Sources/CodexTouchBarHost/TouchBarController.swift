@@ -11,6 +11,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private let bridge: BridgeClient
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
+    private var viewportWidthConstraint: NSLayoutConstraint?
     private var buttons: [String: ActionButton] = [:]
     private var reconciler = ItemReconciler()
     private var controlStripItem: NSCustomTouchBarItem?
@@ -39,16 +40,20 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
-        stackView.spacing = 4
-        stackView.edgeInsets = NSEdgeInsets(top: 1, left: 4, bottom: 1, right: 4)
+        stackView.spacing = 2
+        stackView.edgeInsets = NSEdgeInsets(top: 1, left: 2, bottom: 1, right: 2)
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.hasHorizontalScroller = false
         scrollView.hasVerticalScroller = false
         scrollView.drawsBackground = false
         scrollView.documentView = stackView
-        scrollView.frame = NSRect(x: 0, y: 0, width: 1000, height: 30)
+        scrollView.frame = NSRect(x: 0, y: 0, width: 96, height: 30)
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        viewportWidthConstraint = scrollView.widthAnchor.constraint(equalToConstant: 96)
         NSLayoutConstraint.activate([
+            viewportWidthConstraint!,
+            scrollView.heightAnchor.constraint(equalToConstant: 30),
             stackView.heightAnchor.constraint(equalToConstant: 28),
             stackView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
@@ -104,6 +109,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             if let button = buttons[id] { stackView.addArrangedSubview(button) }
         }
         stackView.layoutSubtreeIfNeeded()
+        let contentWidth = stackView.fittingSize.width
+        viewportWidthConstraint?.constant = min(max(ceil(contentWidth), 96), 1000)
         scrollView.contentView.scroll(to: offset)
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
@@ -115,7 +122,11 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         button.action = #selector(runAction(_:))
         button.bezelStyle = .rounded
         button.isBordered = true
-        button.font = NSFont.systemFont(ofSize: 11, weight: item.state == "active" ? .semibold : .regular)
+        button.lineBreakMode = .byTruncatingTail
+        button.cell?.wraps = false
+        button.cell?.usesSingleLineMode = true
+        let font = NSFont.systemFont(ofSize: 11, weight: item.state == "active" ? .semibold : .regular)
+        button.font = font
         button.image = appIcon(provider: item.iconProvider)
         button.imagePosition = .imageLeading
         button.imageScaling = .scaleProportionallyDown
@@ -123,7 +134,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         button.toolTip = item.accessibilityLabel
         button.setAccessibilityLabel(item.accessibilityLabel)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.updateSize(width: item.fixedWidth, height: 26)
+        button.updateSize(width: item.fittedWidth(font: font), height: 26)
     }
 
     private func displayTitle(for item: RendererItem) -> String {

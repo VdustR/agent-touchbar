@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
 import sqlite3
+import socket
 import subprocess
 import threading
 import time
@@ -14,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 PROVIDERS = ("codex", "claude", "antigravity")
 APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity"}
@@ -27,12 +31,12 @@ CAPABILITIES = {
         "quota": {"supported": True, "source": "codexbar"},
     },
     "claude": {
-        "tasks": {"supported": False, "source": None},
+        "tasks": {"supported": True, "source": "claudeDesktop"},
         "focusTask": {"supported": False, "source": None},
         "quota": {"supported": True, "source": "codexbar"},
     },
     "antigravity": {
-        "tasks": {"supported": False, "source": None},
+        "tasks": {"supported": True, "source": "antigravityDesktop"},
         "focusTask": {"supported": False, "source": None},
         "quota": {"supported": True, "source": "codexbar"},
     },
@@ -152,11 +156,14 @@ class StateStore:
 
     def _refresh_sessions(self) -> None:
         counts: dict[str, dict[str, int]] = {}
+        runtime_sessions: list[dict[str, Any]] = []
+        runtime_error: str | None = None
         try:
-            value, error = self.provider_adapter.sessions(), None
-            if not isinstance(value, list):
+            payload = self.provider_adapter.sessions()
+            if not isinstance(payload, list):
                 raise ValueError("CodexBar session payload is not a list")
-            for item in value:
+            runtime_sessions = [item for item in payload if isinstance(item, dict)]
+            for item in runtime_sessions:
                 if not isinstance(item, dict):
                     continue
                 provider = item.get("provider")
@@ -168,31 +175,43 @@ class StateStore:
                     and state in {"active", "idle"}
                 ):
                     counts.setdefault(provider, {"active": 0, "idle": 0})[state] += 1
-            value = [
-                item
-                for item in value
-                if isinstance(item, dict)
-                and item.get("provider") == "codex"
-                and isinstance(item.get("id"), str)
-                and isinstance(item.get("state"), str)
-                and item.get("state") in DISPLAY_STATES
-                and item.get("source") == "desktopApp"
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
+            runtime_error = str(caught)
+
+        value: list[dict[str, Any]] | None
+        try:
+            value = []
+            codex_runtime = [
+                item for item in runtime_sessions
+                if item.get("provider") == "codex" and isinstance(item.get("id"), str)
             ]
             codexbar_codex = {
-                item["id"]: item for item in value if item.get("provider") == "codex"
+                item["id"]: item for item in codex_runtime
             }
             desktop_codex = self._codex_desktop_sessions()
-            value = []
             for item in desktop_codex:
                 runtime = codexbar_codex.get(item["id"])
                 if runtime:
                     item.update(runtime)
                 value.append(item)
+
+            claude_titles = self._claude_desktop_titles()
+            for item in runtime_sessions:
+                session_id = item.get("id")
+                if item.get("provider") != "claude" or not isinstance(session_id, str):
+                    continue
+                title = claude_titles.get(session_id)
+                if not title:
+                    continue
+                value.append({**item, "sessionName": title, "source": "desktopApp"})
+
+            value.extend(self._antigravity_desktop_sessions())
             codex_counts = {"active": 0, "idle": 0}
             for item in value:
                 if item.get("provider") == "codex" and item.get("state") in codex_counts:
                     codex_counts[item["state"]] += 1
             counts["codex"] = codex_counts
+            error = runtime_error
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as caught:
             value, error = None, str(caught)
         with self.lock:
@@ -243,6 +262,71 @@ class StateStore:
                 ).astimezone().isoformat(),
             }
             for row in rows
+        ]
+
+    @staticmethod
+    def _claude_desktop_titles() -> dict[str, str]:
+        override = os.environ.get("CODEXBAR_TOUCHBAR_CLAUDE_SESSION_DIR")
+        root = Path(override).expanduser() if override else (
+            Path.home() / "Library/Application Support/Claude/claude-code-sessions"
+        )
+        if not root.is_dir():
+            return {}
+        titles: dict[str, tuple[int, str]] = {}
+        for path in root.glob("*/*/local_*.json"):
+            try:
+                data = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            session_id = data.get("cliSessionId")
+            title = data.get("title")
+            if (
+                data.get("isArchived") is True
+                or not isinstance(session_id, str)
+                or not isinstance(title, str)
+                or not title.strip()
+            ):
+                continue
+            activity = data.get("lastActivityAt")
+            timestamp = activity if isinstance(activity, int) else 0
+            previous = titles.get(session_id)
+            if previous is None or timestamp >= previous[0]:
+                titles[session_id] = (timestamp, title.strip())
+        return {session_id: value[1] for session_id, value in titles.items()}
+
+    @staticmethod
+    def _antigravity_desktop_sessions() -> list[dict[str, Any]]:
+        override = os.environ.get("CODEXBAR_TOUCHBAR_ANTIGRAVITY_DEVTOOLS_PORT")
+        port_file = Path(override).expanduser() if override else (
+            Path.home() / "Library/Application Support/Antigravity/DevToolsActivePort"
+        )
+        if not port_file.is_file():
+            return []
+        try:
+            port = int(port_file.read_text().splitlines()[0])
+            with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=0.5) as response:
+                targets = json.loads(response.read())
+            target = next(
+                item for item in targets
+                if item.get("type") == "page" and item.get("title") == "Antigravity"
+            )
+            expression = """JSON.stringify([...document.querySelectorAll('[aria-label="Sidebar"] a[href]')].map(a => ({id: a.getAttribute('href'), title: (a.innerText || '').trim()})).filter(x => x.id && x.title && x.id !== '/' && x.id !== '/history' && !x.id.startsWith('/?')))"""
+            value = _websocket_evaluate(target["webSocketDebuggerUrl"], expression)
+            items = json.loads(value)
+        except (OSError, ValueError, KeyError, StopIteration, json.JSONDecodeError):
+            return []
+        return [
+            {
+                "id": f"antigravity:{item['id']}",
+                "provider": "antigravity",
+                "sessionName": item["title"],
+                "state": "idle",
+                "source": "desktopApp",
+            }
+            for item in items
+            if isinstance(item, dict)
+            and isinstance(item.get("id"), str)
+            and isinstance(item.get("title"), str)
         ]
 
     def _refresh_usage(self) -> None:
@@ -358,7 +442,59 @@ class StateStore:
                 timeout=3,
             )
             return
+        if session.get("source") == "desktopApp" and provider in APP_NAMES:
+            subprocess.run(
+                ["/usr/bin/open", "-a", APP_NAMES[provider]],
+                check=True,
+                timeout=3,
+            )
+            return
         raise ValueError("Task does not support exact focus")
+
+
+def _websocket_evaluate(websocket_url: str, expression: str) -> str:
+    parsed = urlparse(websocket_url)
+    if parsed.hostname != "127.0.0.1" or not parsed.port:
+        raise ValueError("Antigravity DevTools endpoint must be loopback")
+    key = base64.b64encode(os.urandom(16)).decode()
+    connection = socket.create_connection((parsed.hostname, parsed.port), timeout=0.5)
+    connection.settimeout(0.5)
+    try:
+        request = (
+            f"GET {parsed.path} HTTP/1.1\r\nHost: {parsed.hostname}:{parsed.port}\r\n"
+            f"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n"
+        )
+        connection.sendall(request.encode())
+        headers = b""
+        while b"\r\n\r\n" not in headers:
+            headers += connection.recv(4096)
+        if not headers.startswith(b"HTTP/1.1 101"):
+            raise ValueError("Antigravity DevTools websocket rejected the connection")
+        payload = json.dumps({
+            "id": 1,
+            "method": "Runtime.evaluate",
+            "params": {"expression": expression, "returnByValue": True},
+        }).encode()
+        mask = os.urandom(4)
+        length = len(payload)
+        header = bytes([0x81, 0x80 | (126 if length >= 126 else length)])
+        if length >= 126:
+            header += length.to_bytes(2, "big")
+        connection.sendall(header + mask + bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload)))
+        first = connection.recv(2)
+        response_length = first[1] & 0x7F
+        if response_length == 126:
+            response_length = int.from_bytes(connection.recv(2), "big")
+        elif response_length == 127:
+            response_length = int.from_bytes(connection.recv(8), "big")
+        response = b""
+        while len(response) < response_length:
+            response += connection.recv(response_length - len(response))
+        message = json.loads(response)
+        return message["result"]["result"]["value"]
+    finally:
+        connection.close()
 
 
 def compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -394,21 +530,19 @@ def renderer_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(session_id, str):
             continue
         name = session.get("sessionName")
-        project = session.get("projectName")
-        label = (
-            name
-            if isinstance(name, str) and name
-            else f"⌁ {project}"
-            if isinstance(project, str) and project
-            else "task"
-        )
+        if not isinstance(name, str) or not name:
+            continue
+        label = name
+        provider = session.get("provider")
+        if provider not in PROVIDERS:
+            continue
         item = {
             "id": f"task:{session_id}",
             "kind": "task",
-            "provider": "codex",
+            "provider": provider,
             "label": label,
             "state": session.get("state") or "idle",
-            "iconProvider": "codex",
+            "iconProvider": provider,
             "action": {"type": "focusTask", "taskId": session_id},
         }
         (attention if session.get("state") in ATTENTION_STATES else tasks).append(item)
@@ -420,6 +554,15 @@ def renderer_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
             None,
         )
         windows = data.get("windows", []) if isinstance(data, dict) else []
+        if provider == "antigravity":
+            windows = [
+                window for window in windows
+                if str(window.get("label", "")).startswith("Gemini ")
+            ]
+            for window in windows:
+                label = str(window.get("label", ""))
+                if label.startswith("Gemini "):
+                    window["label"] = label.removeprefix("Gemini ")
         counts = snapshot.get("sessionCounts", {}).get(provider)
         parts: list[str] = []
         remaining: list[float] = []
@@ -429,11 +572,6 @@ def renderer_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
                 value = 100 - used
                 remaining.append(value)
                 parts.append(f"{window.get('label', 'limit')} {value:.0f}%")
-        if isinstance(counts, dict):
-            for state in ("active", "idle"):
-                count = counts.get(state)
-                if isinstance(count, int) and not isinstance(count, bool) and count > 0:
-                    parts.append(f"{count} {state}")
         lowest = min(remaining) if remaining else None
         health = (
             "unavailable"

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 struct RendererState: Codable, Equatable, Sendable {
@@ -30,9 +31,9 @@ struct RendererItem: Codable, Equatable, Identifiable, Sendable {
         case task
     }
 
-    var fixedWidth: CGFloat {
-        let minimum: CGFloat = kind == .quota ? 160 : 150
-        return min(max(CGFloat(label.count * 7 + 42), minimum), 320)
+    func fittedWidth(font: NSFont) -> CGFloat {
+        let textWidth = (label as NSString).size(withAttributes: [.font: font]).width
+        return min(max(ceil(textWidth) + 48, 96), 300)
     }
     var accessibilityLabel: String {
         let prefix = kind == .task ? "\(provider) task" : "\(provider) quota"

@@ -36,6 +36,17 @@ class CoreTests(unittest.TestCase):
             ["/usr/bin/open", "codex://threads/thread%2Fid"], check=True, timeout=3
         )
 
+    @patch("codexbar_touchbar.core.subprocess.run")
+    def test_non_codex_session_focus_opens_provider_app(self, run) -> None:
+        store = StateStore()
+        store.sessions.value = [
+            {"id": "claude", "provider": "claude", "source": "desktopApp"}
+        ]
+        store.focus_session("claude")
+        run.assert_called_once_with(
+            ["/usr/bin/open", "-a", "Claude"], check=True, timeout=3
+        )
+
     def test_session_refresh_only_overlays_native_codex_tasks(self) -> None:
         store = StateStore()
         sessions = [
@@ -68,12 +79,18 @@ class CoreTests(unittest.TestCase):
             store._refresh_sessions()
         self.assertEqual([item["id"] for item in store.sessions.value], ["valid"])
 
-    def test_session_refresh_rejects_non_list_payload(self) -> None:
+    def test_session_refresh_loads_native_tasks_when_runtime_payload_is_invalid(self) -> None:
         store = StateStore()
         store.sessions.value = [{"id": "cached", "provider": "codex"}]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value={}):
+        native = [{"id": "native", "provider": "codex", "sessionName": "Native", "state": "idle", "source": "desktopApp"}]
+        with (
+            patch("codexbar_touchbar.core.run_codexbar", return_value={}),
+            patch.object(store, "_codex_desktop_sessions", return_value=native),
+            patch.object(store, "_claude_desktop_titles", return_value={}),
+            patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
+        ):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value, [{"id": "cached", "provider": "codex"}])
+        self.assertEqual(store.sessions.value, native)
         self.assertIn("not a list", store.sessions.error)
         self.assertFalse(store.sessions.refreshing)
 
@@ -328,18 +345,20 @@ class CoreTests(unittest.TestCase):
             ["attention", "active", "idle"],
         )
 
-    def test_claude_sessions_are_counts_only_and_not_exposed_as_tasks(self) -> None:
+    def test_claude_session_without_desktop_title_is_not_exposed(self) -> None:
         store = StateStore()
         sessions = [{"id": "claude-id", "provider": "claude", "state": "active", "source": "desktopApp"}]
         with (
             patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
+            patch.object(store, "_claude_desktop_titles", return_value={}),
+            patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
         ):
             store._refresh_sessions()
         self.assertEqual(store.sessions.value, [])
         self.assertEqual(store.session_counts["claude"], {"active": 1, "idle": 0})
 
-    def test_claude_metadata_does_not_create_touch_bar_tasks(self) -> None:
+    def test_claude_codexbar_title_is_not_used_without_desktop_match(self) -> None:
         store = StateStore()
         sessions = [{
             "id": "claude-id",
@@ -351,18 +370,68 @@ class CoreTests(unittest.TestCase):
         with (
             patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
+            patch.object(store, "_claude_desktop_titles", return_value={}),
+            patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
         ):
             store._refresh_sessions()
         self.assertEqual(store.sessions.value, [])
 
-    def test_antigravity_presence_is_not_exposed_as_a_task(self) -> None:
+    def test_claude_desktop_title_replaces_project_metadata(self) -> None:
         store = StateStore()
+        sessions = [{
+            "id": "claude-id",
+            "provider": "claude",
+            "state": "active",
+            "projectName": "worktree-name",
+        }]
+        with (
+            patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            patch.object(store, "_codex_desktop_sessions", return_value=[]),
+            patch.object(store, "_claude_desktop_titles", return_value={"claude-id": "UI title"}),
+            patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
+        ):
+            store._refresh_sessions()
+        self.assertEqual(store.sessions.value[0]["sessionName"], "UI title")
+        self.assertNotEqual(store.sessions.value[0]["sessionName"], "worktree-name")
+
+    def test_claude_desktop_titles_only_returns_visible_unarchived_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session_dir = root / "account" / "workspace"
+            session_dir.mkdir(parents=True)
+            (session_dir / "local_visible.json").write_text(json.dumps({
+                "cliSessionId": "visible-id",
+                "title": "Visible UI title",
+                "lastActivityAt": 2,
+                "isArchived": False,
+            }))
+            (session_dir / "local_archived.json").write_text(json.dumps({
+                "cliSessionId": "archived-id",
+                "title": "Archived title",
+                "lastActivityAt": 3,
+                "isArchived": True,
+            }))
+            with patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CLAUDE_SESSION_DIR": directory}):
+                titles = StateStore._claude_desktop_titles()
+        self.assertEqual(titles, {"visible-id": "Visible UI title"})
+
+    def test_antigravity_desktop_session_is_exposed_with_ui_title(self) -> None:
+        store = StateStore()
+        antigravity = [{
+            "id": "antigravity:/conversation/one",
+            "provider": "antigravity",
+            "sessionName": "UI conversation",
+            "state": "idle",
+            "source": "desktopApp",
+        }]
         with (
             patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
+            patch.object(store, "_claude_desktop_titles", return_value={}),
+            patch.object(store, "_antigravity_desktop_sessions", return_value=antigravity),
         ):
             store._refresh_sessions()
-        self.assertEqual(store.sessions.value, [])
+        self.assertEqual(store.sessions.value, antigravity)
 
     def test_compact_snapshot_does_not_expose_transcripts_or_accounts(self) -> None:
         snapshot = {
@@ -407,13 +476,13 @@ class CoreTests(unittest.TestCase):
                 "task:idle",
             ],
         )
-        self.assertEqual(result["items"][1]["label"], "7d 75% · 1 active · 1 idle")
+        self.assertEqual(result["items"][1]["label"], "7d 75%")
         self.assertEqual(
             result["items"][4]["action"],
             {"type": "focusTask", "taskId": "active"},
         )
 
-    def test_renderer_snapshot_uses_project_fallback_without_leaking_metadata(self) -> None:
+    def test_renderer_drops_sessions_without_ui_name_without_leaking_metadata(self) -> None:
         result = renderer_snapshot({
             "generatedAt": "now",
             "usage": [],
@@ -427,11 +496,11 @@ class CoreTests(unittest.TestCase):
             "sessionCounts": {},
         })
         encoded = json.dumps(result)
-        self.assertEqual(result["items"][3]["label"], "⌁ Project")
+        self.assertEqual(len(result["items"]), 3)
         self.assertNotIn("transcript", encoded)
         self.assertNotIn("private", encoded)
 
-    def test_renderer_preserves_counts_without_provider_usage(self) -> None:
+    def test_renderer_does_not_render_session_counts_in_quota(self) -> None:
         result = renderer_snapshot({
             "generatedAt": "now",
             "usage": [],
@@ -439,8 +508,29 @@ class CoreTests(unittest.TestCase):
             "sessionCounts": {"claude": {"active": 2, "idle": 3}},
         })
         claude = next(item for item in result["items"] if item["id"] == "quota:claude")
-        self.assertEqual(claude["label"], "2 active · 3 idle")
+        self.assertEqual(claude["label"], "—")
         self.assertEqual(claude["sessionCounts"], {"active": 2, "idle": 3})
+
+    def test_renderer_renders_named_provider_sessions_and_compact_antigravity_quota(self) -> None:
+        result = renderer_snapshot({
+            "generatedAt": "now",
+            "usage": [{
+                "provider": "antigravity",
+                "usage": {"extraRateWindows": [
+                    {"title": "Gemini 5-hour", "window": {"windowMinutes": 300, "usedPercent": 10}},
+                    {"title": "Claude/GPT weekly", "window": {"windowMinutes": 10080, "usedPercent": 20}},
+                ]},
+            }],
+            "sessions": [
+                {"id": "codex", "provider": "codex", "sessionName": "Codex", "state": "active"},
+                {"id": "claude", "provider": "claude", "sessionName": "Claude", "state": "active"},
+            ],
+            "sessionCounts": {},
+        })
+        self.assertIn("task:codex", [item["id"] for item in result["items"]])
+        self.assertIn("task:claude", [item["id"] for item in result["items"]])
+        antigravity = next(item for item in result["items"] if item["id"] == "quota:antigravity")
+        self.assertEqual(antigravity["label"], "5h 90%")
 
 
 if __name__ == "__main__":

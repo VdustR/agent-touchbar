@@ -80,10 +80,13 @@ class ScriptTests(unittest.TestCase):
             root = Path(directory)
             broken_python = root / "broken-python"
             bttcli = root / "bttcli"
+            launchctl = root / "launchctl"
             broken_python.write_text("#!/bin/sh\nexit 9\n")
             bttcli.write_text("#!/bin/sh\nexit 0\n")
+            launchctl.write_text("#!/bin/sh\nexit 3\n")
             broken_python.chmod(0o755)
             bttcli.chmod(0o755)
+            launchctl.chmod(0o755)
             environment = {
                 **os.environ,
                 "HOME": str(root / "home"),
@@ -91,6 +94,7 @@ class ScriptTests(unittest.TestCase):
                 "CODEXBAR_TOUCHBAR_BIN_DIR": str(root / "missing-bin"),
                 "CODEXBAR_TOUCHBAR_PYTHON": str(broken_python),
                 "CODEXBAR_TOUCHBAR_BTTCLI": str(bttcli),
+                "CODEXBAR_TOUCHBAR_LAUNCHCTL": str(launchctl),
             }
             result = subprocess.run(
                 ["/bin/bash", str(repository / "scripts" / "uninstall.sh")],

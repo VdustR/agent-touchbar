@@ -10,7 +10,7 @@ final class ModelsTests: XCTestCase {
         let state = try RendererContract.decode(data)
         XCTAssertEqual(state.items[0].action.endpoint, "/api/v1/actions/focus-task")
         XCTAssertEqual(state.items[0].action.payload, ["taskId": "one"])
-        XCTAssertEqual(state.items[0].fixedWidth, 150)
+        XCTAssertEqual(state.items[0].fittedWidth(font: .systemFont(ofSize: 11)), 96)
     }
 
     func testRejectsUnknownSchema() {
