@@ -83,6 +83,27 @@ def run_codexbar(*args: str, timeout: int = 20) -> Any:
 
 def quota_windows(provider: dict[str, Any]) -> list[dict[str, Any]]:
     usage = provider.get("usage") or {}
+    extra = usage.get("extraRateWindows")
+    if provider.get("provider") == "antigravity" and isinstance(extra, list) and extra:
+        windows = []
+        for item in extra:
+            if not isinstance(item, dict) or not isinstance(item.get("window"), dict):
+                continue
+            window = item["window"]
+            title = item.get("title")
+            minutes = window.get("windowMinutes")
+            period = WINDOW_LABELS.get(minutes, "limit") if isinstance(minutes, int) else "limit"
+            scope = (
+                title.removesuffix("-hour").removesuffix(" weekly")
+                if isinstance(title, str) and title
+                else ""
+            )
+            if scope.endswith("5"):
+                scope = scope[:-1].strip()
+            label = f"{scope} {period}".strip()
+            windows.append({"label": label, **window})
+        if windows:
+            return windows
     windows: list[dict[str, Any]] = []
     for key, fallback in (("primary", "primary"), ("secondary", "secondary"), ("tertiary", "tertiary")):
         window = usage.get(key)
@@ -364,4 +385,85 @@ def compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         "providers": providers,
         "sessions": sessions,
         "capabilities": snapshot.get("capabilities", CAPABILITIES),
+    }
+
+
+def renderer_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Build the ordered, renderer-neutral local UI contract."""
+    compact = compact_snapshot(snapshot)
+    attention: list[dict[str, Any]] = []
+    tasks: list[dict[str, Any]] = []
+    for session in sorted(compact["sessions"], key=session_sort_key):
+        session_id = session.get("id")
+        if not isinstance(session_id, str):
+            continue
+        name = session.get("sessionName")
+        project = session.get("projectName")
+        label = (
+            name
+            if isinstance(name, str) and name
+            else f"⌁ {project}"
+            if isinstance(project, str) and project
+            else "task"
+        )
+        item = {
+            "id": f"task:{session_id}",
+            "kind": "task",
+            "provider": "codex",
+            "label": label,
+            "state": session.get("state") or "idle",
+            "iconProvider": "codex",
+            "action": {"type": "focusTask", "taskId": session_id},
+        }
+        (attention if session.get("state") in ATTENTION_STATES else tasks).append(item)
+
+    quota_items: list[dict[str, Any]] = []
+    for provider in PROVIDERS:
+        data = next(
+            (item for item in compact["providers"] if item.get("provider") == provider),
+            None,
+        )
+        windows = data.get("windows", []) if isinstance(data, dict) else []
+        counts = data.get("sessionCounts") if isinstance(data, dict) else None
+        parts: list[str] = []
+        remaining: list[float] = []
+        for window in windows:
+            used = window.get("usedPercent") if isinstance(window, dict) else None
+            if isinstance(used, (int, float)) and not isinstance(used, bool):
+                value = 100 - used
+                remaining.append(value)
+                parts.append(f"{window.get('label', 'limit')} {value:.0f}%")
+        if isinstance(counts, dict):
+            for state in ("active", "idle"):
+                count = counts.get(state)
+                if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+                    parts.append(f"{count} {state}")
+        lowest = min(remaining) if remaining else None
+        health = (
+            "unavailable"
+            if lowest is None
+            else "healthy"
+            if lowest >= 50
+            else "warning"
+            if lowest >= 20
+            else "critical"
+        )
+        quota_items.append(
+            {
+                "id": f"quota:{provider}",
+                "kind": "quota",
+                "provider": provider,
+                "label": " · ".join(parts) or "—",
+                "state": health,
+                "iconProvider": provider,
+                "windows": windows,
+                "sessionCounts": counts,
+                "action": {"type": "focusProvider", "provider": provider},
+            }
+        )
+    return {
+        "schemaVersion": 1,
+        "generatedAt": compact["generatedAt"],
+        "items": [*attention, *quota_items, *tasks],
+        "capabilities": compact["capabilities"],
     }

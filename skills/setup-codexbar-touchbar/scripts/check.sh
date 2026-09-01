@@ -21,14 +21,11 @@ else
   missing=1
 fi
 
-BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-$(command -v bttcli || true)}
-if [ -z "$BTTCLI" ]; then
-  BTTCLI=/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli
-fi
-if [ -x "$BTTCLI" ]; then
-  printf 'ok: BetterTouchTool CLI (%s)\n' "$BTTCLI"
+SWIFT_BIN=$(command -v swift || true)
+if [ -x "$SWIFT_BIN" ]; then
+  printf 'ok: swift (%s)\n' "$SWIFT_BIN"
 else
-  printf 'missing: BetterTouchTool CLI\n'
+  printf 'missing: swift\n'
   missing=1
 fi
 

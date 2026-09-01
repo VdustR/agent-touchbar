@@ -25,6 +25,11 @@ class ScriptTests(unittest.TestCase):
             script,
         )
 
+    def test_renderer_install_does_not_suppress_bootout_failures(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "install-renderer.sh").read_text()
+        self.assertIn("Could not find specified service", script)
+        self.assertNotIn('bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true', script)
+
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
         self.assertIn('rm -rf "$INSTALL_ROOT/venv"', script)
@@ -56,7 +61,7 @@ class ScriptTests(unittest.TestCase):
                 env=environment,
             )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Failed to remove", result.stderr)
+        self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

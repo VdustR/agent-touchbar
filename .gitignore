@@ -4,5 +4,6 @@ __pycache__/
 .coverage
 dist/
 build/
+native/.build/
 *.egg-info/
 .DS_Store

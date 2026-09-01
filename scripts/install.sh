@@ -15,12 +15,8 @@ elif ! command -v codexbar >/dev/null 2>&1; then
   echo "codexbar is required: https://github.com/steipete/CodexBar" >&2
   exit 1
 fi
-BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-$(command -v bttcli || true)}
-if [ -z "$BTTCLI" ]; then
-  BTTCLI=/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli
-fi
-if [ ! -x "$BTTCLI" ]; then
-  echo "BetterTouchTool with its CLI is required." >&2
+if ! command -v swift >/dev/null 2>&1; then
+  echo "Swift is required to build the native Touch Bar host." >&2
   exit 1
 fi
 
@@ -42,6 +38,8 @@ mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 "$VENV/bin/python" -m pip install --disable-pip-version-check --quiet --upgrade "$REPO_ROOT"
 ln -sfn "$VENV/bin/codexbar-touchbar" "$BIN_DIR/codexbar-touchbar"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" install "$@"
+"$REPO_ROOT/scripts/install-renderer.sh"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" doctor
+"$REPO_ROOT/scripts/remove-legacy-btt.sh"
 
 echo "Installed codexbar-touchbar at $BIN_DIR/codexbar-touchbar"
