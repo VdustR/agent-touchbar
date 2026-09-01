@@ -45,6 +45,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('mv "$VENV_BACKUP" "$VENV"', script)
         self.assertIn('mv "$APP_BACKUP" "$APP_PATH"', script)
         self.assertIn('mv "$RENDERER_PLIST_BACKUP" "$RENDERER_PLIST"', script)
+        self.assertIn('exit "$failure_status"', script)
+        self.assertIn('mv "$RENDERER_PLIST" "$RENDERER_PLIST_BACKUP"', script)
         self.assertLess(script.index('codexbar-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('codexbar-touchbar\" doctor')))
 
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:

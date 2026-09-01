@@ -111,15 +111,17 @@ def bridge_is_healthy() -> bool:
         try:
             with urllib.request.urlopen("http://127.0.0.1:4317/healthz", timeout=0.5) as response:
                 payload = json.loads(response.read())
-            if (
-                response.status == 200
-                and isinstance(payload, dict)
-                and payload.get("service") == "codexbar-touchbar"
-                and payload.get("ok") is True
-            ):
-                return True
+        except urllib.error.HTTPError as response:
+            try:
+                payload = json.loads(response.read())
+            except json.JSONDecodeError:
+                payload = None
+            finally:
+                response.close()
         except (OSError, urllib.error.URLError, json.JSONDecodeError):
-            pass
+            payload = None
+        if isinstance(payload, dict) and payload.get("service") == "codexbar-touchbar":
+            return True
         time.sleep(0.25)
     return False
 

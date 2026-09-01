@@ -11,24 +11,38 @@ BRIDGE_PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.plist"
 RENDERER_PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.renderer.plist"
 RENDERER_PLIST_BACKUP="$INSTALL_ROOT/renderer.plist.rollback"
 BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
+HAD_VENV=0
+HAD_APP=0
+HAD_RENDERER_PLIST=0
 
 rollback_install() {
+  failure_status=$?
   trap - ERR
   set +e
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" >/dev/null 2>&1
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar.renderer" >/dev/null 2>&1
-  rm -rf "$VENV"
-  rm -rf "$APP_PATH"
-  rm -f "$RENDERER_PLIST"
+  if [ -d "$VENV_BACKUP" ]; then
+    rm -rf "$VENV"
+    mv "$VENV_BACKUP" "$VENV"
+  elif [ "$HAD_VENV" -eq 0 ]; then
+    rm -rf "$VENV"
+  fi
   if [ -d "$APP_BACKUP" ]; then
+    rm -rf "$APP_PATH"
     mv "$APP_BACKUP" "$APP_PATH"
+  elif [ "$HAD_APP" -eq 0 ]; then
+    rm -rf "$APP_PATH"
   fi
   if [ -f "$RENDERER_PLIST_BACKUP" ]; then
+    rm -f "$RENDERER_PLIST"
     mv "$RENDERER_PLIST_BACKUP" "$RENDERER_PLIST"
+  elif [ "$HAD_RENDERER_PLIST" -eq 0 ]; then
+    rm -f "$RENDERER_PLIST"
+  fi
+  if [ -f "$RENDERER_PLIST" ]; then
     /bin/launchctl bootstrap "gui/$(id -u)" "$RENDERER_PLIST"
   fi
-  if [ -d "$VENV_BACKUP" ]; then
-    mv "$VENV_BACKUP" "$VENV"
+  if [ "$HAD_VENV" -eq 1 ] && [ -x "$VENV/bin/codexbar-touchbar" ]; then
     ln -sfn "$VENV/bin/codexbar-touchbar" "$BIN_DIR/codexbar-touchbar"
     if CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" \
       "$BIN_DIR/codexbar-touchbar" install; then
@@ -39,6 +53,7 @@ rollback_install() {
   else
     rm -f "$BIN_DIR/codexbar-touchbar" "$BRIDGE_PLIST"
   fi
+  exit "$failure_status"
 }
 
 if [ -n "${CODEXBAR_TOUCHBAR_CODEXBAR:-}" ]; then
@@ -73,13 +88,16 @@ rm -rf "$VENV_BACKUP" "$APP_BACKUP"
 rm -f "$RENDERER_PLIST_BACKUP"
 trap rollback_install ERR
 if [ -d "$VENV" ]; then
+  HAD_VENV=1
   mv "$VENV" "$VENV_BACKUP"
 fi
 if [ -d "$APP_PATH" ]; then
+  HAD_APP=1
   mv "$APP_PATH" "$APP_BACKUP"
 fi
 if [ -f "$RENDERER_PLIST" ]; then
-  cp "$RENDERER_PLIST" "$RENDERER_PLIST_BACKUP"
+  HAD_RENDERER_PLIST=1
+  mv "$RENDERER_PLIST" "$RENDERER_PLIST_BACKUP"
 fi
 "$REPO_ROOT/scripts/install-renderer.sh"
 "$PYTHON_BIN" -m venv "$VENV"

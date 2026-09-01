@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-from codexbar_touchbar.cli import doctor, install_service, launch_agent_loaded, main, native_renderer_is_healthy, stop_service, uninstall_service
+from codexbar_touchbar.cli import bridge_is_healthy, doctor, install_service, launch_agent_loaded, main, native_renderer_is_healthy, stop_service, uninstall_service
 
 
 class CliTests(unittest.TestCase):
@@ -127,6 +127,17 @@ class CliTests(unittest.TestCase):
         )
         with patch("codexbar_touchbar.cli.urllib.request.urlopen", side_effect=error):
             self.assertTrue(native_renderer_is_healthy())
+
+    def test_bridge_health_reads_service_identity_from_aggregate_503(self) -> None:
+        error = HTTPError(
+            "http://127.0.0.1:4317/healthz",
+            503,
+            "unhealthy",
+            Message(),
+            BytesIO(b'{"service":"codexbar-touchbar","ok":false}'),
+        )
+        with patch("codexbar_touchbar.cli.urllib.request.urlopen", side_effect=error):
+            self.assertTrue(bridge_is_healthy())
 
     @patch("codexbar_touchbar.cli.subprocess.run")
     def test_uninstall_boots_out_loaded_label_without_plist(self, run) -> None:
