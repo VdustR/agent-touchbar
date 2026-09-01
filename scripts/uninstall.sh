@@ -41,6 +41,9 @@ fi
 "$REPO_ROOT/scripts/remove-legacy-btt.sh"
 rm -f "$COMMAND"
 rm -rf "$INSTALL_ROOT/venv"
+rm -rf "$INSTALL_ROOT/venv.rollback"
+rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"
+rm -f "$INSTALL_ROOT/renderer.plist.rollback"
 
 echo "Removed the bridge, native renderer, command, and legacy BetterTouchTool widgets."
 echo "Runtime logs and extracted icons remain at: $DATA_DIR"

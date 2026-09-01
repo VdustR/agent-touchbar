@@ -65,6 +65,9 @@ class ScriptTests(unittest.TestCase):
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
         self.assertIn('rm -rf "$INSTALL_ROOT/venv"', script)
+        self.assertIn('rm -rf "$INSTALL_ROOT/venv.rollback"', script)
+        self.assertIn('rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"', script)
+        self.assertIn('rm -f "$INSTALL_ROOT/renderer.plist.rollback"', script)
         self.assertIn('DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
         self.assertIn('remain at: $DATA_DIR', script)
 
