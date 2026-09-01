@@ -105,7 +105,8 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
         status, health = self.request("GET", "/healthz")
-        self.assertEqual(status, 200)
+        self.assertEqual(status, 503)
+        self.assertFalse(health["ok"])
         self.assertTrue(health["nativeRenderer"]["alive"])
         self.assertEqual(
             health["nativeRenderer"]["capabilities"],

@@ -123,7 +123,7 @@ class CliTests(unittest.TestCase):
             503,
             "unhealthy",
             Message(),
-            BytesIO(b'{"ok":false,"nativeRenderer":{"alive":true}}'),
+            BytesIO(b'{"ok":false,"nativeRenderer":{"alive":true,"capabilities":{"systemModal":true}}}'),
         )
         with patch("codexbar_touchbar.cli.urllib.request.urlopen", side_effect=error):
             self.assertTrue(native_renderer_is_healthy())

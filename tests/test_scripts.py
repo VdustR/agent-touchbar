@@ -40,6 +40,7 @@ class ScriptTests(unittest.TestCase):
     def test_installer_restores_previous_bridge_when_validation_fails(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
         self.assertIn("trap rollback_install ERR", script)
+        self.assertLess(script.index("trap rollback_install ERR"), script.index('mv "$VENV" "$VENV_BACKUP"'))
         self.assertLess(script.index('mv "$VENV" "$VENV_BACKUP"'), script.index('"$PYTHON_BIN" -m venv "$VENV"'))
         self.assertIn('mv "$VENV_BACKUP" "$VENV"', script)
         self.assertIn('mv "$APP_BACKUP" "$APP_PATH"', script)

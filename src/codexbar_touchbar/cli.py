@@ -181,10 +181,13 @@ def native_renderer_is_healthy() -> bool:
         except (OSError, urllib.error.URLError, json.JSONDecodeError):
             payload = None
         renderer = payload.get("nativeRenderer", {}) if isinstance(payload, dict) else {}
-        if renderer.get("alive") is True:
+        capabilities = renderer.get("capabilities", {})
+        if (
+            renderer.get("alive") is True
+            and isinstance(capabilities, dict)
+            and capabilities.get("systemModal") is True
+        ):
             return True
-        if payload is None:
-            pass
         time.sleep(0.25)
     return False
 

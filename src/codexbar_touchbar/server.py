@@ -142,6 +142,7 @@ def handler_factory(
                     and "codex" not in snapshot["errors"]["usage"]
                     and "codex" in providers
                     and native_renderer["alive"] is True
+                    and native_renderer["capabilities"].get("systemModal") is True
                 )
                 status = HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE
                 self.send_json(

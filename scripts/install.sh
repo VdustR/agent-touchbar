@@ -71,6 +71,7 @@ fi
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 rm -rf "$VENV_BACKUP" "$APP_BACKUP"
 rm -f "$RENDERER_PLIST_BACKUP"
+trap rollback_install ERR
 if [ -d "$VENV" ]; then
   mv "$VENV" "$VENV_BACKUP"
 fi
@@ -80,7 +81,6 @@ fi
 if [ -f "$RENDERER_PLIST" ]; then
   cp "$RENDERER_PLIST" "$RENDERER_PLIST_BACKUP"
 fi
-trap rollback_install ERR
 "$REPO_ROOT/scripts/install-renderer.sh"
 "$PYTHON_BIN" -m venv "$VENV"
 "$VENV/bin/python" -m pip install --disable-pip-version-check --quiet --upgrade "$REPO_ROOT"
