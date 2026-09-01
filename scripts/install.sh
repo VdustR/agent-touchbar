@@ -82,6 +82,7 @@ fi
   echo "Python 3.11 or newer is required." >&2
   exit 1
 }
+PYTHON_BIN=$("$PYTHON_BIN" -c 'import sys; print(sys.executable)')
 
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 rm -rf "$VENV_BACKUP" "$APP_BACKUP"
@@ -90,6 +91,9 @@ trap rollback_install ERR
 if [ -d "$VENV" ]; then
   HAD_VENV=1
   mv "$VENV" "$VENV_BACKUP"
+  case "$PYTHON_BIN" in
+    "$VENV"/*) PYTHON_BIN="$VENV_BACKUP/${PYTHON_BIN#"$VENV"/}" ;;
+  esac
 fi
 if [ -d "$APP_PATH" ]; then
   HAD_APP=1
