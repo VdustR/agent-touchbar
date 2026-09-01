@@ -10,6 +10,7 @@ APP_BACKUP="$INSTALL_ROOT/Agent Touch Bar.app.rollback"
 BRIDGE_PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.plist"
 RENDERER_PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.renderer.plist"
 RENDERER_PLIST_BACKUP="$INSTALL_ROOT/renderer.plist.rollback"
+COMMIT_MARKER="$INSTALL_ROOT/install-transaction.committed"
 BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
 HAD_VENV=0
 HAD_APP=0
@@ -20,6 +21,7 @@ rollback_install() {
   if [ -n "${1:-}" ]; then failure_status=$1; fi
   trap - ERR INT TERM HUP
   set +e
+  if [ -f "$COMMIT_MARKER" ]; then exit "$failure_status"; fi
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" >/dev/null 2>&1
   /bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar.renderer" >/dev/null 2>&1
   if [ -d "$VENV_BACKUP" ]; then
@@ -72,7 +74,10 @@ if ! command -v swift >/dev/null 2>&1; then
 fi
 
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-if [ -d "$VENV_BACKUP" ]; then
+if [ -f "$COMMIT_MARKER" ]; then
+  rm -rf "$VENV_BACKUP" "$APP_BACKUP"
+  rm -f "$RENDERER_PLIST_BACKUP" "$COMMIT_MARKER"
+elif [ -d "$VENV_BACKUP" ]; then
   rm -rf "$VENV"
   mv "$VENV_BACKUP" "$VENV"
 fi
@@ -124,9 +129,10 @@ fi
 ln -sfn "$VENV/bin/codexbar-touchbar" "$BIN_DIR/codexbar-touchbar"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" install "$@"
 CODEXBAR_TOUCHBAR_DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/codexbar-touchbar" doctor
+: >"$COMMIT_MARKER"
 trap - ERR INT TERM HUP
 rm -rf "$VENV_BACKUP" "$APP_BACKUP"
-rm -f "$RENDERER_PLIST_BACKUP"
+rm -f "$RENDERER_PLIST_BACKUP" "$COMMIT_MARKER"
 "$REPO_ROOT/scripts/remove-legacy-btt.sh"
 
 echo "Installed codexbar-touchbar at $BIN_DIR/codexbar-touchbar"

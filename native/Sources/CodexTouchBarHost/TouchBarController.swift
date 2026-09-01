@@ -128,7 +128,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     private func displayTitle(for item: RendererItem) -> String {
         guard item.kind == .task else { return item.label }
-        let marker = ["active": "●", "idle": "○"].first { $0.key == item.state }?.value ?? "!"
+        let marker = ["active": "●", "idle": "○", "available": "○"]
+            .first { $0.key == item.state }?.value ?? "!"
         return "\(marker) \(item.label)"
     }
 

@@ -22,7 +22,7 @@ mkdir -p "$INSTALL_ROOT" "$LOG_DIR" "$(dirname "$PLIST")"
 
 if ! bootout_output=$(/bin/launchctl bootout "gui/$(id -u)/$LABEL" 2>&1); then
   case "$bootout_output" in
-    *"Could not find specified service"*|*"No such process"*) ;;
+    *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
     *) echo "$bootout_output" >&2; exit 1 ;;
   esac
 fi

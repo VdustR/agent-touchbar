@@ -16,20 +16,22 @@ if [ ! -x "$PYTHON_BIN" ]; then
   exit 1
 fi
 
-trigger_file=$(mktemp)
-trap 'rm -f "$trigger_file"' EXIT
-"$PYTHON_BIN" - >"$trigger_file" <<'PY'
+"$PYTHON_BIN" - "$BTTCLI" <<'PY'
+import subprocess
+import sys
 import uuid
 
 namespace = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
 names = ["Codex usage", "Claude usage", "Antigravity usage", "Attention session", "Agent usage"]
 names.extend(f"Agent session {index}" for index in range(1, 13))
-for name in names:
-    print(str(uuid.uuid5(namespace, name)).upper())
-print("E4F85058-56B7-4DBD-9064-3C26F11B8C52")
+trigger_ids = [str(uuid.uuid5(namespace, name)).upper() for name in names]
+trigger_ids.append("E4F85058-56B7-4DBD-9064-3C26F11B8C52")
+for trigger_id in trigger_ids:
+    subprocess.run(
+        [sys.argv[1], "delete_trigger", f"uuid={trigger_id}"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        timeout=5,
+    )
 PY
-
-while IFS= read -r trigger_id; do
-  "$BTTCLI" delete_trigger "uuid=$trigger_id" >/dev/null
-done < "$trigger_file"
 echo "Removed legacy BetterTouchTool widgets."

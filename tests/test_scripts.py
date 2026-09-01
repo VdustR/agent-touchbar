@@ -32,6 +32,7 @@ class ScriptTests(unittest.TestCase):
 
     def test_renderer_install_does_not_suppress_bootout_failures(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "install-renderer.sh").read_text()
+        self.assertIn("Could not find service", script)
         self.assertIn("Could not find specified service", script)
         self.assertNotIn('bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true', script)
 
@@ -68,6 +69,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('rm -rf "$INSTALL_ROOT/venv.rollback"', script)
         self.assertIn('rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"', script)
         self.assertIn('rm -f "$INSTALL_ROOT/renderer.plist.rollback"', script)
+        self.assertIn('rm -f "$INSTALL_ROOT/install-transaction.committed"', script)
         self.assertIn('DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
         self.assertIn('remain at: $DATA_DIR', script)
 

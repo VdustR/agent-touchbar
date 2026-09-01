@@ -44,6 +44,7 @@ rm -rf "$INSTALL_ROOT/venv"
 rm -rf "$INSTALL_ROOT/venv.rollback"
 rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"
 rm -f "$INSTALL_ROOT/renderer.plist.rollback"
+rm -f "$INSTALL_ROOT/install-transaction.committed"
 
 echo "Removed the bridge, native renderer, command, and legacy BetterTouchTool widgets."
 echo "Runtime logs and extracted icons remain at: $DATA_DIR"
