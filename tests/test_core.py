@@ -302,10 +302,11 @@ class CoreTests(unittest.TestCase):
         provider = {"provider": "antigravity", "usage": {"extraRateWindows": [
             {"title": "Gemini 5-hour", "window": {"windowMinutes": 300, "usedPercent": 10}},
             {"title": "Claude/GPT weekly", "window": {"windowMinutes": 10080, "usedPercent": 20}},
+            {"title": "Gemini 2.5 weekly", "window": {"windowMinutes": 10080, "usedPercent": 30}},
         ]}}
         self.assertEqual(
             [window["label"] for window in quota_windows(provider)],
-            ["Gemini 5h", "Claude/GPT 7d"],
+            ["Gemini 5h", "Claude/GPT 7d", "Gemini 2.5 7d"],
         )
 
     def test_sessions_sort_by_state_then_recent_activity(self) -> None:

@@ -93,13 +93,9 @@ def quota_windows(provider: dict[str, Any]) -> list[dict[str, Any]]:
             title = item.get("title")
             minutes = window.get("windowMinutes")
             period = WINDOW_LABELS.get(minutes, "limit") if isinstance(minutes, int) else "limit"
-            scope = (
-                title.removesuffix("-hour").removesuffix(" weekly")
-                if isinstance(title, str) and title
-                else ""
-            )
-            if scope.endswith("5"):
-                scope = scope[:-1].strip()
+            scope = title.removesuffix(" weekly") if isinstance(title, str) and title else ""
+            if scope.endswith("5-hour"):
+                scope = scope.removesuffix("5-hour").strip()
             label = f"{scope} {period}".strip()
             windows.append({"label": label, **window})
         if windows:

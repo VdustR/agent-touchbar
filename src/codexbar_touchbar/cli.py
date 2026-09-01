@@ -18,6 +18,7 @@ from .core import StateStore, codexbar_path
 from .server import serve
 
 LABEL = "com.vdustr.codexbar-touchbar"
+RENDERER_LABEL = f"{LABEL}.renderer"
 
 
 def data_dir() -> Path:
@@ -31,6 +32,10 @@ def data_dir() -> Path:
 
 def launch_agent_path() -> Path:
     return Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+
+
+def renderer_launch_agent_path() -> Path:
+    return Path.home() / "Library/LaunchAgents" / f"{RENDERER_LABEL}.plist"
 
 
 def stop_service() -> None:
@@ -126,9 +131,9 @@ def bridge_is_healthy() -> bool:
     return False
 
 
-def launch_agent_loaded() -> bool:
+def launch_agent_loaded(label: str = LABEL) -> bool:
     result = subprocess.run(
-        ["/bin/launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
+        ["/bin/launchctl", "print", f"gui/{os.getuid()}/{label}"],
         capture_output=True,
         text=True,
     )
@@ -145,6 +150,8 @@ def doctor() -> int:
         checks["codexbar"] = str(error)
     checks["launchAgentConfigured"] = launch_agent_path().is_file()
     checks["launchAgentLoaded"] = launch_agent_loaded()
+    checks["rendererLaunchAgentConfigured"] = renderer_launch_agent_path().is_file()
+    checks["rendererLaunchAgentLoaded"] = launch_agent_loaded(RENDERER_LABEL)
     checks["bridge"] = bridge_is_healthy()
     checks["nativeRenderer"] = native_renderer_is_healthy()
     store = StateStore(usage_ttl=0, sessions_ttl=0)
@@ -156,6 +163,8 @@ def doctor() -> int:
     ok = (
         bool(checks.get("launchAgentConfigured"))
         and bool(checks.get("launchAgentLoaded"))
+        and bool(checks.get("rendererLaunchAgentConfigured"))
+        and bool(checks.get("rendererLaunchAgentLoaded"))
         and bool(checks.get("bridge"))
         and bool(checks.get("nativeRenderer"))
         and not snapshot["errors"]["sessions"]

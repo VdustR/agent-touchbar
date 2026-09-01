@@ -71,6 +71,20 @@ if ! command -v swift >/dev/null 2>&1; then
   exit 1
 fi
 
+mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
+if [ -d "$VENV_BACKUP" ]; then
+  rm -rf "$VENV"
+  mv "$VENV_BACKUP" "$VENV"
+fi
+if [ -d "$APP_BACKUP" ]; then
+  rm -rf "$APP_PATH"
+  mv "$APP_BACKUP" "$APP_PATH"
+fi
+if [ -f "$RENDERER_PLIST_BACKUP" ]; then
+  rm -f "$RENDERER_PLIST"
+  mv "$RENDERER_PLIST_BACKUP" "$RENDERER_PLIST"
+fi
+
 if [ -n "${CODEXBAR_TOUCHBAR_PYTHON:-}" ]; then
   PYTHON_BIN=$CODEXBAR_TOUCHBAR_PYTHON
 elif PYTHON_BIN=$(command -v python3); then
@@ -85,19 +99,6 @@ fi
 }
 PYTHON_BIN=$("$PYTHON_BIN" -c 'import sys; print(sys.executable)')
 
-mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-if [ -d "$VENV_BACKUP" ]; then
-  rm -rf "$VENV"
-  mv "$VENV_BACKUP" "$VENV"
-fi
-if [ -d "$APP_BACKUP" ]; then
-  rm -rf "$APP_PATH"
-  mv "$APP_BACKUP" "$APP_PATH"
-fi
-if [ -f "$RENDERER_PLIST_BACKUP" ]; then
-  rm -f "$RENDERER_PLIST"
-  mv "$RENDERER_PLIST_BACKUP" "$RENDERER_PLIST"
-fi
 trap rollback_install ERR
 trap 'rollback_install 130' INT
 trap 'rollback_install 143' TERM

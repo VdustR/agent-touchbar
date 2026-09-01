@@ -102,12 +102,14 @@ class CliTests(unittest.TestCase):
         with (
             patch("codexbar_touchbar.cli.codexbar_path", return_value="/bin/codexbar"),
             patch("codexbar_touchbar.cli.launch_agent_path") as plist,
+            patch("codexbar_touchbar.cli.renderer_launch_agent_path") as renderer_plist,
             patch("codexbar_touchbar.cli.bridge_is_healthy", return_value=True),
             patch("codexbar_touchbar.cli.native_renderer_is_healthy", return_value=renderer),
             patch("codexbar_touchbar.cli.launch_agent_loaded", return_value=True),
             patch("codexbar_touchbar.cli.StateStore") as store_type,
         ):
             plist.return_value.is_file.return_value = True
+            renderer_plist.return_value.is_file.return_value = True
             store_type.return_value.snapshot.return_value = snapshot
             return doctor()
 
