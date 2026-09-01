@@ -8,7 +8,6 @@ COMMAND="$BIN_DIR/agent-touchbar"
 LAUNCHCTL="${AGENT_TOUCHBAR_LAUNCHCTL:-/bin/launchctl}"
 
 VENV_COMMAND="$INSTALL_ROOT/venv/bin/agent-touchbar"
-REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PLIST="$HOME/Library/LaunchAgents/com.vdustr.agent-touchbar.plist"
 RENDERER_LABEL=com.vdustr.agent-touchbar.renderer
 RENDERER_PLIST="$HOME/Library/LaunchAgents/$RENDERER_LABEL.plist"
@@ -39,7 +38,6 @@ else
   fi
   rm -f "$PLIST"
 fi
-"$REPO_ROOT/scripts/remove-legacy-btt.sh"
 rm -f "$COMMAND"
 rm -rf "$INSTALL_ROOT/venv"
 rm -rf "$INSTALL_ROOT/venv.rollback"
@@ -47,5 +45,5 @@ rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"
 rm -f "$INSTALL_ROOT/renderer.plist.rollback"
 rm -f "$INSTALL_ROOT/install-transaction.committed"
 
-echo "Removed the bridge, native renderer, command, and legacy BetterTouchTool widgets."
+echo "Removed the bridge, native renderer, command, and isolated Python environment."
 echo "Runtime logs and extracted icons remain at: $DATA_DIR"

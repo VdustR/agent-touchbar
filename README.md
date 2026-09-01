@@ -2,7 +2,6 @@
 
 Agent Touch Bar is a source-only native macOS Touch Bar dashboard for Codex,
 Claude Code, and Antigravity sessions, usage limits, and app focus.
-BetterTouchTool is not required.
 
 ![Agent Touch Bar showing fictional usage limits and session names](docs/assets/agent-touchbar.png)
 
@@ -153,9 +152,8 @@ To update, pull the latest `main` branch and run `./scripts/install.sh` again.
 ./scripts/uninstall.sh
 ```
 
-The uninstaller removes the native app and both LaunchAgents. It also removes
-legacy widgets created by older BetterTouchTool-based versions when the BTT CLI
-is available. Logs remain in the data directory for diagnosis.
+The uninstaller removes the native app and both LaunchAgents. Logs remain in
+the data directory for diagnosis.
 
 ## Agent setup skill
 
