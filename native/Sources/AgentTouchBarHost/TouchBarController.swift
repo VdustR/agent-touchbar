@@ -1,8 +1,8 @@
 import AppKit
 
 private extension NSTouchBarItem.Identifier {
-    static let nativeContent = NSTouchBarItem.Identifier("com.vdustr.codexbar-touchbar.content")
-    static let nativeControlStrip = NSTouchBarItem.Identifier("com.vdustr.codexbar-touchbar.control-strip")
+    static let nativeContent = NSTouchBarItem.Identifier("com.vdustr.agent-touchbar.content")
+    static let nativeControlStrip = NSTouchBarItem.Identifier("com.vdustr.agent-touchbar.control-strip")
 }
 
 @MainActor
@@ -36,7 +36,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private func configureTouchBar() {
         touchBar.delegate = self
         touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier(
-            "com.vdustr.codexbar-touchbar.native"
+            "com.vdustr.agent-touchbar.native"
         )
         touchBar.defaultItemIdentifiers = [.nativeContent]
         touchBar.customizationRequiredItemIdentifiers = [.nativeContent]

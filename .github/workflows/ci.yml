@@ -21,4 +21,4 @@ jobs:
       - run: pyright src tests
       - run: python -m compileall -q src tests
       - run: swift test --package-path native
-      - run: bash -n native/build-app.sh scripts/install.sh scripts/install-renderer.sh scripts/remove-legacy-btt.sh scripts/uninstall.sh skills/setup-codexbar-touchbar/scripts/check.sh
+      - run: bash -n native/build-app.sh scripts/install.sh scripts/install-renderer.sh scripts/remove-legacy-btt.sh scripts/uninstall.sh skills/setup-agent-touchbar/scripts/check.sh

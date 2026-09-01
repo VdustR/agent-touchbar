@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import CodexTouchBarHost
+@testable import AgentTouchBarHost
 
 final class ModelsTests: XCTestCase {
     func testTouchBarViewportLeavesSystemControlStripVisible() {

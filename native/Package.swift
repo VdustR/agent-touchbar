@@ -3,16 +3,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "CodexTouchBarHost",
+    name: "AgentTouchBarHost",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "codex-touchbar-host", targets: ["CodexTouchBarHost"]),
+        .executable(name: "agent-touchbar-host", targets: ["AgentTouchBarHost"]),
     ],
     targets: [
-        .executableTarget(name: "CodexTouchBarHost"),
+        .executableTarget(name: "AgentTouchBarHost"),
         .testTarget(
-            name: "CodexTouchBarHostTests",
-            dependencies: ["CodexTouchBarHost"]
+            name: "AgentTouchBarHostTests",
+            dependencies: ["AgentTouchBarHost"]
         ),
     ]
 )

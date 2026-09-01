@@ -17,15 +17,15 @@ from pathlib import Path
 from .core import StateStore, codexbar_path
 from .server import serve
 
-LABEL = "com.vdustr.codexbar-touchbar"
+LABEL = "com.vdustr.agent-touchbar"
 RENDERER_LABEL = f"{LABEL}.renderer"
 
 
 def data_dir() -> Path:
     return Path(
         os.environ.get(
-            "CODEXBAR_TOUCHBAR_DATA_DIR",
-            Path.home() / "Library/Application Support/CodexBarTouchBar",
+            "AGENT_TOUCHBAR_DATA_DIR",
+            Path.home() / "Library/Application Support/AgentTouchBar",
         )
     ).expanduser().resolve()
 
@@ -63,11 +63,11 @@ def install_service() -> None:
     log_dir = data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     invoked = Path(sys.argv[0])
-    if invoked.name == "codexbar-touchbar":
+    if invoked.name == "agent-touchbar":
         executable = invoked if invoked.is_absolute() else Path(shutil.which(sys.argv[0]) or invoked)
         program_arguments = [str(executable.resolve()), "serve"]
     else:
-        program_arguments = [sys.executable, "-m", "codexbar_touchbar", "serve"]
+        program_arguments = [sys.executable, "-m", "agent_touchbar", "serve"]
     payload = {
         "Label": LABEL,
         "ProgramArguments": program_arguments,
@@ -77,8 +77,8 @@ def install_service() -> None:
         "StandardErrorPath": str(log_dir / "stderr.log"),
         "ProcessType": "Interactive",
         "EnvironmentVariables": {
-            "CODEXBAR_TOUCHBAR_CODEXBAR": codexbar_path(),
-            "CODEXBAR_TOUCHBAR_DATA_DIR": str(data_dir()),
+            "AGENT_TOUCHBAR_CODEXBAR": codexbar_path(),
+            "AGENT_TOUCHBAR_DATA_DIR": str(data_dir()),
         },
     }
     target.write_bytes(plistlib.dumps(payload))
@@ -125,7 +125,7 @@ def bridge_is_healthy() -> bool:
                 response.close()
         except (OSError, urllib.error.URLError, json.JSONDecodeError):
             payload = None
-        if isinstance(payload, dict) and payload.get("service") == "codexbar-touchbar":
+        if isinstance(payload, dict) and payload.get("service") == "agent-touchbar":
             return True
         time.sleep(0.25)
     return False
@@ -204,7 +204,7 @@ def native_renderer_is_healthy() -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="codexbar-touchbar")
+    parser = argparse.ArgumentParser(prog="agent-touchbar")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("serve")
     commands.add_parser("install")

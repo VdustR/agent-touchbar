@@ -2,9 +2,9 @@
 set -euo pipefail
 
 missing=0
-CODEXBAR_BIN=${CODEXBAR_TOUCHBAR_CODEXBAR:-}
+CODEXBAR_BIN=${AGENT_TOUCHBAR_CODEXBAR:-}
 if [ -z "$CODEXBAR_BIN" ]; then CODEXBAR_BIN=$(command -v codexbar || true); fi
-PYTHON_BIN=${CODEXBAR_TOUCHBAR_PYTHON:-}
+PYTHON_BIN=${AGENT_TOUCHBAR_PYTHON:-}
 if [ -z "$PYTHON_BIN" ]; then PYTHON_BIN=$(command -v python3 || true); fi
 
 if [ -x "$CODEXBAR_BIN" ]; then

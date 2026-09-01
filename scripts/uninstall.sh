@@ -1,16 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-INSTALL_ROOT="${CODEXBAR_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Support/CodexBarTouchBar}"
-DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"
-BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
-COMMAND="$BIN_DIR/codexbar-touchbar"
-LAUNCHCTL="${CODEXBAR_TOUCHBAR_LAUNCHCTL:-/bin/launchctl}"
+INSTALL_ROOT="${AGENT_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Support/AgentTouchBar}"
+DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"
+BIN_DIR="${AGENT_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
+COMMAND="$BIN_DIR/agent-touchbar"
+LAUNCHCTL="${AGENT_TOUCHBAR_LAUNCHCTL:-/bin/launchctl}"
 
-VENV_COMMAND="$INSTALL_ROOT/venv/bin/codexbar-touchbar"
+VENV_COMMAND="$INSTALL_ROOT/venv/bin/agent-touchbar"
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.plist"
-RENDERER_LABEL=com.vdustr.codexbar-touchbar.renderer
+PLIST="$HOME/Library/LaunchAgents/com.vdustr.agent-touchbar.plist"
+RENDERER_LABEL=com.vdustr.agent-touchbar.renderer
 RENDERER_PLIST="$HOME/Library/LaunchAgents/$RENDERER_LABEL.plist"
 RENDERER_APP="$INSTALL_ROOT/Agent Touch Bar.app"
 
@@ -28,7 +28,7 @@ if [ -x "$COMMAND" ]; then
 elif [ -x "$VENV_COMMAND" ]; then
   "$VENV_COMMAND" uninstall "$@"
 else
-  if ! bootout_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>&1); then
+  if ! bootout_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/com.vdustr.agent-touchbar" 2>&1); then
     case "$bootout_output" in
       *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
       *)

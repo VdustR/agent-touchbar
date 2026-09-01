@@ -8,7 +8,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
-from codexbar_touchbar.server import ActionTracker, RendererTracker, handler_factory, task_fingerprint
+from agent_touchbar.server import ActionTracker, RendererTracker, handler_factory, task_fingerprint
 
 
 class FakeStore:
@@ -63,7 +63,7 @@ class ServerTests(unittest.TestCase):
     def test_health(self) -> None:
         status, body = self.request("GET", "/healthz")
         self.assertEqual(status, 200)
-        self.assertEqual(body["service"], "codexbar-touchbar")
+        self.assertEqual(body["service"], "agent-touchbar")
         self.assertTrue(body["ok"])
         self.assertIsNone(body["lastAction"])
 
@@ -153,7 +153,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["target"], f"task:{task_fingerprint('valid')}")
 
-    @patch("codexbar_touchbar.server.subprocess.run")
+    @patch("agent_touchbar.server.subprocess.run")
     def test_native_provider_focus_uses_allowlisted_app(self, run) -> None:
         status, body = self.request(
             "POST", "/api/v1/actions/focus-provider", {"provider": "claude"}
@@ -184,7 +184,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("provider", body["error"])
 
-    @patch("codexbar_touchbar.server.subprocess.run")
+    @patch("agent_touchbar.server.subprocess.run")
     def test_provider_focus_uses_allowlisted_app(self, run) -> None:
         status, body = self.request("POST", "/api/focus/provider", {"provider": "codex"})
         self.assertEqual(status, 200)

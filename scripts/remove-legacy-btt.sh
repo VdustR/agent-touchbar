@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-$(command -v bttcli || true)}
+BTTCLI=${AGENT_TOUCHBAR_BTTCLI:-$(command -v bttcli || true)}
 if [ -z "$BTTCLI" ]; then
   BTTCLI=/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli
 fi
@@ -10,7 +10,7 @@ if [ ! -x "$BTTCLI" ]; then
   exit 0
 fi
 
-PYTHON_BIN=${CODEXBAR_TOUCHBAR_PYTHON:-$(command -v python3 || true)}
+PYTHON_BIN=${AGENT_TOUCHBAR_PYTHON:-$(command -v python3 || true)}
 if [ ! -x "$PYTHON_BIN" ]; then
   echo "Python is required to identify legacy widget IDs." >&2
   exit 1
