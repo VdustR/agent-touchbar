@@ -47,7 +47,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         scrollView.hasVerticalScroller = false
         scrollView.drawsBackground = false
         scrollView.documentView = stackView
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.frame = NSRect(x: 0, y: 0, width: 1000, height: 30)
         NSLayoutConstraint.activate([
             stackView.heightAnchor.constraint(equalToConstant: 28),
             stackView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),

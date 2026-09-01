@@ -37,6 +37,15 @@ class ScriptTests(unittest.TestCase):
             script.index('"$VENV/bin/python" -m pip install'),
         )
 
+    def test_installer_restores_previous_bridge_when_validation_fails(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
+        self.assertIn("trap rollback_install ERR", script)
+        self.assertLess(script.index('mv "$VENV" "$VENV_BACKUP"'), script.index('"$PYTHON_BIN" -m venv "$VENV"'))
+        self.assertIn('mv "$VENV_BACKUP" "$VENV"', script)
+        self.assertIn('mv "$APP_BACKUP" "$APP_PATH"', script)
+        self.assertIn('mv "$RENDERER_PLIST_BACKUP" "$RENDERER_PLIST"', script)
+        self.assertLess(script.index('codexbar-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('codexbar-touchbar\" doctor')))
+
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
         self.assertIn('rm -rf "$INSTALL_ROOT/venv"', script)
