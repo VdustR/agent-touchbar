@@ -3,6 +3,12 @@ import XCTest
 @testable import CodexTouchBarHost
 
 final class ModelsTests: XCTestCase {
+    func testTouchBarViewportLeavesSystemControlStripVisible() {
+        XCTAssertEqual(TouchBarLayout.viewportWidth(for: 40), 96)
+        XCTAssertEqual(TouchBarLayout.viewportWidth(for: 300.2), 301)
+        XCTAssertEqual(TouchBarLayout.viewportWidth(for: 1_000), 620)
+    }
+
     func testLauncherAppearanceLoadsCombinedContentAndColor() throws {
         let suiteName = "LauncherAppearanceTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

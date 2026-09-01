@@ -1,6 +1,15 @@
 import AppKit
 import Foundation
 
+enum TouchBarLayout {
+    static let minimumViewportWidth: CGFloat = 96
+    static let maximumViewportWidth: CGFloat = 620
+
+    static func viewportWidth(for contentWidth: CGFloat) -> CGFloat {
+        min(max(ceil(contentWidth), minimumViewportWidth), maximumViewportWidth)
+    }
+}
+
 struct TypographySettings: Equatable {
     static let defaultSize: CGFloat = 11
 
