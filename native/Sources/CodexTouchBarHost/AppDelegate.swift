@@ -47,7 +47,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         refreshTimer?.invalidate()
         heartbeatTimer?.invalidate()
-        heartbeatTimer?.invalidate()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         touchBarController.shutdown()
     }
