@@ -82,7 +82,7 @@ def handler_factory(
     native_tracker = renderer_tracker or RendererTracker()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "CodexBarTouchBar"
+        server_version = "AgentTouchBar"
 
         def log_message(self, format: str, *args: Any) -> None:
             return
@@ -147,7 +147,7 @@ def handler_factory(
                 status = HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE
                 self.send_json(
                     {
-                        "service": "codexbar-touchbar",
+                        "service": "agent-touchbar",
                         "ok": status == HTTPStatus.OK,
                         "errors": snapshot["errors"],
                         "nativeRenderer": native_renderer,

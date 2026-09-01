@@ -2,9 +2,9 @@
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-INSTALL_ROOT="${CODEXBAR_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Support/CodexBarTouchBar}"
+INSTALL_ROOT="${AGENT_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Support/AgentTouchBar}"
 APP_PATH="$INSTALL_ROOT/Agent Touch Bar.app"
-LABEL=com.vdustr.codexbar-touchbar.renderer
+LABEL=com.vdustr.agent-touchbar.renderer
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$INSTALL_ROOT/logs"
 
@@ -13,7 +13,7 @@ mkdir -p "$INSTALL_ROOT" "$LOG_DIR" "$(dirname "$PLIST")"
 
 /usr/bin/plutil -create xml1 "$PLIST"
 /usr/bin/plutil -insert Label -string "$LABEL" "$PLIST"
-/usr/bin/plutil -insert ProgramArguments -json "[\"$APP_PATH/Contents/MacOS/codex-touchbar-host\"]" "$PLIST"
+/usr/bin/plutil -insert ProgramArguments -json "[\"$APP_PATH/Contents/MacOS/agent-touchbar-host\"]" "$PLIST"
 /usr/bin/plutil -insert RunAtLoad -bool true "$PLIST"
 /usr/bin/plutil -insert KeepAlive -bool true "$PLIST"
 /usr/bin/plutil -insert ProcessType -string Interactive "$PLIST"

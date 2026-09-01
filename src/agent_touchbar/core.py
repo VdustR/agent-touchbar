@@ -62,7 +62,7 @@ def find_executable(name: str, candidates: tuple[str, ...]) -> str:
     def absolute(path: str) -> str:
         return str(Path(path).expanduser().absolute())
 
-    override = os.environ.get(f"CODEXBAR_TOUCHBAR_{name.upper()}")
+    override = os.environ.get(f"AGENT_TOUCHBAR_{name.upper()}")
     if override and Path(override).is_file():
         return absolute(override)
     resolved = shutil.which(name)
@@ -224,7 +224,7 @@ class StateStore:
 
     @staticmethod
     def _codex_desktop_sessions() -> list[dict[str, Any]]:
-        override = os.environ.get("CODEXBAR_TOUCHBAR_CODEX_STATE_DB")
+        override = os.environ.get("AGENT_TOUCHBAR_CODEX_STATE_DB")
         path = Path(override).expanduser() if override else Path.home() / ".codex/state_5.sqlite"
         if not path.is_file():
             raise ValueError("Codex Desktop task registry is unavailable")
@@ -266,7 +266,7 @@ class StateStore:
 
     @staticmethod
     def _claude_desktop_titles() -> dict[str, str]:
-        override = os.environ.get("CODEXBAR_TOUCHBAR_CLAUDE_SESSION_DIR")
+        override = os.environ.get("AGENT_TOUCHBAR_CLAUDE_SESSION_DIR")
         root = Path(override).expanduser() if override else (
             Path.home() / "Library/Application Support/Claude/claude-code-sessions"
         )
@@ -296,7 +296,7 @@ class StateStore:
 
     @staticmethod
     def _antigravity_desktop_sessions() -> list[dict[str, Any]]:
-        override = os.environ.get("CODEXBAR_TOUCHBAR_ANTIGRAVITY_DEVTOOLS_PORT")
+        override = os.environ.get("AGENT_TOUCHBAR_ANTIGRAVITY_DEVTOOLS_PORT")
         port_file = Path(override).expanduser() if override else (
             Path.home() / "Library/Application Support/Antigravity/DevToolsActivePort"
         )

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from codexbar_touchbar.core import CAPABILITIES, StateStore, compact_snapshot, find_executable, quota_windows, renderer_snapshot, session_sort_key
+from agent_touchbar.core import CAPABILITIES, StateStore, compact_snapshot, find_executable, quota_windows, renderer_snapshot, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
@@ -19,13 +19,13 @@ class CoreTests(unittest.TestCase):
             link = root / "stable"
             target.write_text("")
             link.symlink_to(target)
-            with patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_TOOL": str(link)}):
+            with patch.dict(os.environ, {"AGENT_TOUCHBAR_TOOL": str(link)}):
                 self.assertEqual(find_executable("tool", ()), str(link))
 
     def test_session_refresh_interval_prioritizes_interactive_updates(self) -> None:
         self.assertLessEqual(StateStore().sessions_ttl, 0.75)
 
-    @patch("codexbar_touchbar.core.subprocess.run")
+    @patch("agent_touchbar.core.subprocess.run")
     def test_codex_session_focus_uses_thread_deep_link(self, run) -> None:
         store = StateStore()
         store.sessions.value = [
@@ -36,7 +36,7 @@ class CoreTests(unittest.TestCase):
             ["/usr/bin/open", "codex://threads/thread%2Fid"], check=True, timeout=3
         )
 
-    @patch("codexbar_touchbar.core.subprocess.run")
+    @patch("agent_touchbar.core.subprocess.run")
     def test_non_codex_session_focus_opens_provider_app(self, run) -> None:
         store = StateStore()
         store.sessions.value = [
@@ -55,7 +55,7 @@ class CoreTests(unittest.TestCase):
             {"id": "antigravity", "provider": "antigravity"},
         ]
         native = [{"id": "codex", "provider": "codex", "state": "idle", "source": "desktopApp"}]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
+        with patch("agent_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
             store._refresh_sessions()
         self.assertEqual(
             store.sessions.value,
@@ -75,7 +75,7 @@ class CoreTests(unittest.TestCase):
             "state": "idle",
             "source": "desktopApp",
         }]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
+        with patch("agent_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
             store._refresh_sessions()
         self.assertEqual([item["id"] for item in store.sessions.value], ["valid"])
 
@@ -84,7 +84,7 @@ class CoreTests(unittest.TestCase):
         store.sessions.value = [{"id": "cached", "provider": "codex"}]
         native = [{"id": "native", "provider": "codex", "sessionName": "Native", "state": "idle", "source": "desktopApp"}]
         with (
-            patch("codexbar_touchbar.core.run_codexbar", return_value={}),
+            patch("agent_touchbar.core.run_codexbar", return_value={}),
             patch.object(store, "_codex_desktop_sessions", return_value=native),
             patch.object(store, "_claude_desktop_titles", return_value={}),
             patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
@@ -101,7 +101,7 @@ class CoreTests(unittest.TestCase):
             {"id": "2", "provider": "claude", "state": "idle"},
             {"id": "3", "provider": "claude", "state": "unknown"},
         ]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=[]):
+        with patch("agent_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=[]):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["claude"], {"active": 1, "idle": 1})
 
@@ -117,7 +117,7 @@ class CoreTests(unittest.TestCase):
             "state": "idle",
             "source": "desktopApp",
         }]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
+        with patch("agent_touchbar.core.run_codexbar", return_value=sessions), patch.object(StateStore, "_codex_desktop_sessions", return_value=native):
             store._refresh_sessions()
         self.assertEqual(store.session_counts["codex"], {"active": 1, "idle": 0})
         self.assertFalse(store.sessions.refreshing)
@@ -132,7 +132,7 @@ class CoreTests(unittest.TestCase):
             "source": "desktopApp",
         }]
         with (
-            patch("codexbar_touchbar.core.run_codexbar", return_value=runtime),
+            patch("agent_touchbar.core.run_codexbar", return_value=runtime),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
         ):
             store._refresh_sessions()
@@ -143,8 +143,8 @@ class CoreTests(unittest.TestCase):
         store = StateStore()
         store.sessions.value = [{"id": "cached", "provider": "codex", "state": "idle"}]
         with (
-            patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CODEX_STATE_DB": "/missing/state.sqlite"}),
-            patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
+            patch.dict(os.environ, {"AGENT_TOUCHBAR_CODEX_STATE_DB": "/missing/state.sqlite"}),
+            patch("agent_touchbar.core.run_codexbar", return_value=[]),
         ):
             store._refresh_sessions()
         self.assertEqual(store.sessions.value[0]["id"], "cached")
@@ -176,8 +176,8 @@ class CoreTests(unittest.TestCase):
                 "source": "desktopApp", "sessionName": "Runtime title",
             }]
             with (
-                patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CODEX_STATE_DB": str(database)}),
-                patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+                patch.dict(os.environ, {"AGENT_TOUCHBAR_CODEX_STATE_DB": str(database)}),
+                patch("agent_touchbar.core.run_codexbar", return_value=sessions),
             ):
                 store = StateStore()
                 store._refresh_sessions()
@@ -194,17 +194,17 @@ class CoreTests(unittest.TestCase):
             store = StateStore()
             store.sessions.value = [{"id": "cached", "provider": "codex", "state": "idle"}]
             with (
-                patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CODEX_STATE_DB": str(database)}),
-                patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
+                patch.dict(os.environ, {"AGENT_TOUCHBAR_CODEX_STATE_DB": str(database)}),
+                patch("agent_touchbar.core.run_codexbar", return_value=[]),
             ):
                 store._refresh_sessions()
         self.assertEqual(store.sessions.value[0]["id"], "cached")
         self.assertIn("registry", store.sessions.error)
 
-    @patch("codexbar_touchbar.core.threading.Thread")
+    @patch("agent_touchbar.core.threading.Thread")
     def test_uninitialized_cache_always_refreshes(self, thread) -> None:
         store = StateStore(usage_ttl=60)
-        with patch("codexbar_touchbar.core.time.monotonic", return_value=10):
+        with patch("agent_touchbar.core.time.monotonic", return_value=10):
             store._start_if_stale(store.usage, 60, store._refresh_usage, "usage")
         self.assertTrue(store.usage.refreshing)
         thread.assert_called_once()
@@ -222,7 +222,7 @@ class CoreTests(unittest.TestCase):
                 raise OSError("temporary failure")
             return [{"provider": provider, "usage": {"primary": {"usedPercent": 30}}}]
 
-        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+        with patch("agent_touchbar.core.run_codexbar", side_effect=response):
             store._refresh_usage()
 
         providers = {item["provider"]: item for item in store.usage.value}
@@ -233,7 +233,7 @@ class CoreTests(unittest.TestCase):
     def test_usage_refresh_clears_successful_empty_provider(self) -> None:
         store = StateStore()
         store.usage.value = [{"provider": "claude", "usage": {}}]
-        with patch("codexbar_touchbar.core.run_codexbar", return_value=[]):
+        with patch("agent_touchbar.core.run_codexbar", return_value=[]):
             store._refresh_usage()
         self.assertEqual(store.usage.value, [])
 
@@ -245,7 +245,7 @@ class CoreTests(unittest.TestCase):
             provider = args[2]
             return {} if provider == "codex" else []
 
-        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+        with patch("agent_touchbar.core.run_codexbar", side_effect=response):
             store._refresh_usage()
         self.assertEqual(store.usage.value, [{"provider": "codex", "usage": {}}])
         self.assertIn("not a list", store.usage.error["codex"])
@@ -258,7 +258,7 @@ class CoreTests(unittest.TestCase):
             provider = args[2]
             return [{"provider": provider, "usage": "unavailable"}]
 
-        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+        with patch("agent_touchbar.core.run_codexbar", side_effect=response):
             store._refresh_usage()
         self.assertEqual(store.usage.value, [{"provider": "codex", "usage": {}}])
         self.assertIn("invalid shape", store.usage.error["codex"])
@@ -273,7 +273,7 @@ class CoreTests(unittest.TestCase):
                 return [{"provider": "codex", "usage": {}}]
             return [{"provider": provider, "usage": {}}]
 
-        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+        with patch("agent_touchbar.core.run_codexbar", side_effect=response):
             store._refresh_usage()
         self.assertIn("claude", store.usage.error)
 
@@ -287,7 +287,7 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(store.usage.value[0]["provider"], "codex")
             raise OSError("optional provider unavailable")
 
-        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+        with patch("agent_touchbar.core.run_codexbar", side_effect=response):
             store._refresh_usage()
         self.assertEqual(store.usage.value[0]["provider"], "codex")
 
@@ -302,7 +302,7 @@ class CoreTests(unittest.TestCase):
             self.assertIn("codex", store.usage.error)
             return []
 
-        with patch("codexbar_touchbar.core.run_codexbar", side_effect=response):
+        with patch("agent_touchbar.core.run_codexbar", side_effect=response):
             store._refresh_usage()
         self.assertIn("codex", store.usage.error)
 
@@ -349,7 +349,7 @@ class CoreTests(unittest.TestCase):
         store = StateStore()
         sessions = [{"id": "claude-id", "provider": "claude", "state": "active", "source": "desktopApp"}]
         with (
-            patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            patch("agent_touchbar.core.run_codexbar", return_value=sessions),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
             patch.object(store, "_claude_desktop_titles", return_value={}),
             patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
@@ -368,7 +368,7 @@ class CoreTests(unittest.TestCase):
             "sessionName": "CodexBar title",
         }]
         with (
-            patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            patch("agent_touchbar.core.run_codexbar", return_value=sessions),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
             patch.object(store, "_claude_desktop_titles", return_value={}),
             patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
@@ -385,7 +385,7 @@ class CoreTests(unittest.TestCase):
             "projectName": "worktree-name",
         }]
         with (
-            patch("codexbar_touchbar.core.run_codexbar", return_value=sessions),
+            patch("agent_touchbar.core.run_codexbar", return_value=sessions),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
             patch.object(store, "_claude_desktop_titles", return_value={"claude-id": "UI title"}),
             patch.object(store, "_antigravity_desktop_sessions", return_value=[]),
@@ -411,7 +411,7 @@ class CoreTests(unittest.TestCase):
                 "lastActivityAt": 3,
                 "isArchived": True,
             }))
-            with patch.dict(os.environ, {"CODEXBAR_TOUCHBAR_CLAUDE_SESSION_DIR": directory}):
+            with patch.dict(os.environ, {"AGENT_TOUCHBAR_CLAUDE_SESSION_DIR": directory}):
                 titles = StateStore._claude_desktop_titles()
         self.assertEqual(titles, {"visible-id": "Visible UI title"})
 
@@ -425,7 +425,7 @@ class CoreTests(unittest.TestCase):
             "source": "desktopApp",
         }]
         with (
-            patch("codexbar_touchbar.core.run_codexbar", return_value=[]),
+            patch("agent_touchbar.core.run_codexbar", return_value=[]),
             patch.object(store, "_codex_desktop_sessions", return_value=[]),
             patch.object(store, "_claude_desktop_titles", return_value={}),
             patch.object(store, "_antigravity_desktop_sessions", return_value=antigravity),

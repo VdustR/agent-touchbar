@@ -17,7 +17,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('pyright==1.1.411', project)
 
     def test_setup_check_requires_swift_5_10(self) -> None:
-        script = (Path(__file__).resolve().parents[1] / "skills" / "setup-codexbar-touchbar" / "scripts" / "check.sh").read_text()
+        script = (Path(__file__).resolve().parents[1] / "skills" / "setup-agent-touchbar" / "scripts" / "check.sh").read_text()
         self.assertIn('SWIFT_MINOR" -ge 10', script)
         self.assertIn("missing: swift 5.10 or newer", script)
 
@@ -27,7 +27,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("Could not find specified service", script)
         self.assertIn("No such process", script)
         self.assertNotIn(
-            'bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>/dev/null || true',
+            'bootout "gui/$(id -u)/com.vdustr.agent-touchbar" 2>/dev/null || true',
             script,
         )
 
@@ -43,6 +43,20 @@ class ScriptTests(unittest.TestCase):
             script.index('"$REPO_ROOT/scripts/install-renderer.sh"'),
             script.index('"$VENV/bin/python" -m pip install'),
         )
+
+    def test_installer_migrates_and_stops_legacy_services_before_install(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
+        install = script.index('"$REPO_ROOT/scripts/install-renderer.sh"')
+        self.assertLess(script.index("migrate_legacy_install\nstop_legacy_services"), install)
+        self.assertLess(script.index("trap rollback_install ERR"), script.index("stop_legacy_services\n", script.index("trap rollback_install ERR")))
+        self.assertIn("restore_legacy_services", script)
+        self.assertIn('launcherIconPath', script)
+        self.assertIn('legacy_icon_path#"$LEGACY_INSTALL_ROOT"/', script)
+
+    def test_installer_removes_legacy_install_only_after_new_doctor(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
+        doctor = script.index('agent-touchbar" doctor')
+        self.assertGreater(script.index('rm -rf "$LEGACY_INSTALL_ROOT"'), doctor)
 
     def test_installer_restores_previous_bridge_when_validation_fails(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
@@ -62,7 +76,7 @@ class ScriptTests(unittest.TestCase):
             script.index('mv "$VENV_BACKUP" "$VENV"', transaction_start),
             script.index("trap rollback_install ERR", transaction_start),
         )
-        self.assertLess(script.index('codexbar-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('codexbar-touchbar\" doctor')))
+        self.assertLess(script.index('agent-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('agent-touchbar\" doctor')))
 
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
@@ -71,7 +85,7 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"', script)
         self.assertIn('rm -f "$INSTALL_ROOT/renderer.plist.rollback"', script)
         self.assertIn('rm -f "$INSTALL_ROOT/install-transaction.committed"', script)
-        self.assertIn('DATA_DIR="${CODEXBAR_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
+        self.assertIn('DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
         self.assertIn('remain at: $DATA_DIR', script)
 
     def test_fallback_uninstall_reports_uuid_generator_failure(self) -> None:
@@ -90,11 +104,11 @@ class ScriptTests(unittest.TestCase):
             environment = {
                 **os.environ,
                 "HOME": str(root / "home"),
-                "CODEXBAR_TOUCHBAR_INSTALL_ROOT": str(root / "missing-install"),
-                "CODEXBAR_TOUCHBAR_BIN_DIR": str(root / "missing-bin"),
-                "CODEXBAR_TOUCHBAR_PYTHON": str(broken_python),
-                "CODEXBAR_TOUCHBAR_BTTCLI": str(bttcli),
-                "CODEXBAR_TOUCHBAR_LAUNCHCTL": str(launchctl),
+                "AGENT_TOUCHBAR_INSTALL_ROOT": str(root / "missing-install"),
+                "AGENT_TOUCHBAR_BIN_DIR": str(root / "missing-bin"),
+                "AGENT_TOUCHBAR_PYTHON": str(broken_python),
+                "AGENT_TOUCHBAR_BTTCLI": str(bttcli),
+                "AGENT_TOUCHBAR_LAUNCHCTL": str(launchctl),
             }
             result = subprocess.run(
                 ["/bin/bash", str(repository / "scripts" / "uninstall.sh")],

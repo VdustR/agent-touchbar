@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusItem()
         _ = touchBarController
         refresh()
-        if ProcessInfo.processInfo.environment["CODEXBAR_TOUCHBAR_PRESENT_ON_LAUNCH"] == "1" {
+        if ProcessInfo.processInfo.environment["AGENT_TOUCHBAR_PRESENT_ON_LAUNCH"] == "1" {
             touchBarController.showTouchBar()
         }
         refreshTimer = Timer.scheduledTimer(

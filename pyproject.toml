@@ -3,9 +3,9 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codexbar-touchbar"
+name = "agent-touchbar"
 version = "0"
-description = "Touch Bar controls for Codex Desktop tasks and coding-agent usage limits on macOS"
+description = "Native macOS Touch Bar dashboard for coding-agent sessions, quotas, and app focus"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -20,7 +20,7 @@ dependencies = []
 dev = ["pyright==1.1.411"]
 
 [project.scripts]
-codexbar-touchbar = "codexbar_touchbar.cli:main"
+agent-touchbar = "agent_touchbar.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
