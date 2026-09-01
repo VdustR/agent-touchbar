@@ -53,7 +53,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         scrollView.documentView = stackView
         scrollView.frame = NSRect(x: 0, y: 0, width: 96, height: 30)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
-        viewportWidthConstraint = scrollView.widthAnchor.constraint(equalToConstant: 96)
+        viewportWidthConstraint = scrollView.widthAnchor.constraint(
+            equalToConstant: TouchBarLayout.minimumViewportWidth
+        )
         NSLayoutConstraint.activate([
             viewportWidthConstraint!,
             scrollView.heightAnchor.constraint(equalToConstant: 30),
@@ -117,7 +119,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
         stackView.layoutSubtreeIfNeeded()
         let contentWidth = stackView.fittingSize.width
-        viewportWidthConstraint?.constant = min(max(ceil(contentWidth), 96), 1000)
+        viewportWidthConstraint?.constant = TouchBarLayout.viewportWidth(for: contentWidth)
         scrollView.contentView.scroll(to: offset)
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
