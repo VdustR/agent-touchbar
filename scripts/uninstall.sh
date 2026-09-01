@@ -7,12 +7,20 @@ BIN_DIR="${CODEXBAR_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}"
 COMMAND="$BIN_DIR/codexbar-touchbar"
 
 VENV_COMMAND="$INSTALL_ROOT/venv/bin/codexbar-touchbar"
-BTTCLI=${CODEXBAR_TOUCHBAR_BTTCLI:-$(command -v bttcli || true)}
-if [ -z "$BTTCLI" ]; then
-  BTTCLI=/Applications/BetterTouchTool.app/Contents/SharedSupport/bin/bttcli
-fi
-PYTHON_BIN=${CODEXBAR_TOUCHBAR_PYTHON:-$(command -v python3 || true)}
+REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PLIST="$HOME/Library/LaunchAgents/com.vdustr.codexbar-touchbar.plist"
+RENDERER_LABEL=com.vdustr.codexbar-touchbar.renderer
+RENDERER_PLIST="$HOME/Library/LaunchAgents/$RENDERER_LABEL.plist"
+RENDERER_APP="$INSTALL_ROOT/Agent Touch Bar.app"
+
+if ! renderer_output=$(/bin/launchctl bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1); then
+  case "$renderer_output" in
+    *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
+    *) echo "$renderer_output" >&2; exit 1 ;;
+  esac
+fi
+rm -f "$RENDERER_PLIST"
+rm -rf "$RENDERER_APP"
 
 if [ -x "$COMMAND" ]; then
   "$COMMAND" uninstall "$@"
@@ -21,7 +29,7 @@ elif [ -x "$VENV_COMMAND" ]; then
 else
   if ! bootout_output=$(/bin/launchctl bootout "gui/$(id -u)/com.vdustr.codexbar-touchbar" 2>&1); then
     case "$bootout_output" in
-      *"Could not find specified service"*|*"No such process"*) ;;
+      *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
       *)
         echo "$bootout_output" >&2
         exit 1
@@ -29,39 +37,14 @@ else
     esac
   fi
   rm -f "$PLIST"
-  cleanup_failed=0
-  if [ -x "$BTTCLI" ] && [ -x "$PYTHON_BIN" ]; then
-    trigger_file=$(mktemp)
-    if "$PYTHON_BIN" - >"$trigger_file" <<'PY'
-import uuid
-
-namespace = uuid.UUID("f4a5b457-924c-49bc-a878-86034bd43261")
-names = ["Codex usage", "Claude usage", "Antigravity usage", "Attention session", "Agent usage"]
-names.extend(f"Agent session {index}" for index in range(1, 13))
-for name in names:
-    print(str(uuid.uuid5(namespace, name)).upper())
-print("E4F85058-56B7-4DBD-9064-3C26F11B8C52")
-PY
-    then
-      while IFS= read -r trigger_id; do
-        if ! "$BTTCLI" delete_trigger "uuid=$trigger_id" >/dev/null 2>&1; then
-          cleanup_failed=1
-        fi
-      done < "$trigger_file"
-    else
-      cleanup_failed=1
-    fi
-    rm -f "$trigger_file"
-  else
-    cleanup_failed=1
-  fi
-  if [ "$cleanup_failed" -ne 0 ]; then
-    echo "Failed to remove one or more BetterTouchTool widgets." >&2
-    exit 1
-  fi
 fi
+"$REPO_ROOT/scripts/remove-legacy-btt.sh"
 rm -f "$COMMAND"
 rm -rf "$INSTALL_ROOT/venv"
+rm -rf "$INSTALL_ROOT/venv.rollback"
+rm -rf "$INSTALL_ROOT/Agent Touch Bar.app.rollback"
+rm -f "$INSTALL_ROOT/renderer.plist.rollback"
+rm -f "$INSTALL_ROOT/install-transaction.committed"
 
-echo "Removed the service, command, and BetterTouchTool widgets."
+echo "Removed the bridge, native renderer, command, and legacy BetterTouchTool widgets."
 echo "Runtime logs and extracted icons remain at: $DATA_DIR"

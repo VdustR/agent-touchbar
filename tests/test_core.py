@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from codexbar_touchbar.core import CAPABILITIES, StateStore, compact_snapshot, find_executable, quota_windows, session_sort_key
+from codexbar_touchbar.core import CAPABILITIES, StateStore, compact_snapshot, find_executable, quota_windows, renderer_snapshot, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
@@ -298,6 +298,17 @@ class CoreTests(unittest.TestCase):
         }
         self.assertEqual(quota_windows(provider), [{"label": "7d", "windowMinutes": 10080, "usedPercent": 25}])
 
+    def test_quota_windows_preserve_named_extra_rate_windows(self) -> None:
+        provider = {"provider": "antigravity", "usage": {"extraRateWindows": [
+            {"title": "Gemini 5-hour", "window": {"windowMinutes": 300, "usedPercent": 10}},
+            {"title": "Claude/GPT weekly", "window": {"windowMinutes": 10080, "usedPercent": 20}},
+            {"title": "Gemini 2.5 weekly", "window": {"windowMinutes": 10080, "usedPercent": 30}},
+        ]}}
+        self.assertEqual(
+            [window["label"] for window in quota_windows(provider)],
+            ["Gemini 5h", "Claude/GPT 7d", "Gemini 2.5 7d"],
+        )
+
     def test_sessions_sort_by_state_then_recent_activity(self) -> None:
         sessions = [
             {"id": "idle", "state": "idle", "lastActivityAt": "2026-08-31T10:00:00Z"},
@@ -368,6 +379,68 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["capabilities"], CAPABILITIES)
         self.assertEqual(result["capabilities"]["codex"]["tasks"]["source"], "codexDesktop")
         self.assertFalse(result["capabilities"]["claude"]["focusTask"]["supported"])
+
+    def test_renderer_snapshot_orders_attention_quota_active_and_idle(self) -> None:
+        snapshot = {
+            "generatedAt": "now",
+            "usage": [{
+                "provider": "codex",
+                "usage": {"primary": {"windowMinutes": 10080, "usedPercent": 25}},
+            }],
+            "sessions": [
+                {"id": "idle", "provider": "codex", "sessionName": "Idle", "state": "idle"},
+                {"id": "active", "provider": "codex", "sessionName": "Active", "state": "active"},
+                {"id": "input", "provider": "codex", "sessionName": "Input", "state": "needs_input"},
+            ],
+            "sessionCounts": {"codex": {"active": 1, "idle": 1}},
+        }
+        result = renderer_snapshot(snapshot)
+        self.assertEqual(result["schemaVersion"], 1)
+        self.assertEqual(
+            [item["id"] for item in result["items"]],
+            [
+                "task:input",
+                "quota:codex",
+                "quota:claude",
+                "quota:antigravity",
+                "task:active",
+                "task:idle",
+            ],
+        )
+        self.assertEqual(result["items"][1]["label"], "7d 75% · 1 active · 1 idle")
+        self.assertEqual(
+            result["items"][4]["action"],
+            {"type": "focusTask", "taskId": "active"},
+        )
+
+    def test_renderer_snapshot_uses_project_fallback_without_leaking_metadata(self) -> None:
+        result = renderer_snapshot({
+            "generatedAt": "now",
+            "usage": [],
+            "sessions": [{
+                "id": "task-id",
+                "provider": "codex",
+                "projectName": "Project",
+                "state": "idle",
+                "transcriptPath": "/private/transcript",
+            }],
+            "sessionCounts": {},
+        })
+        encoded = json.dumps(result)
+        self.assertEqual(result["items"][3]["label"], "⌁ Project")
+        self.assertNotIn("transcript", encoded)
+        self.assertNotIn("private", encoded)
+
+    def test_renderer_preserves_counts_without_provider_usage(self) -> None:
+        result = renderer_snapshot({
+            "generatedAt": "now",
+            "usage": [],
+            "sessions": [],
+            "sessionCounts": {"claude": {"active": 2, "idle": 3}},
+        })
+        claude = next(item for item in result["items"] if item["id"] == "quota:claude")
+        self.assertEqual(claude["label"], "2 active · 3 idle")
+        self.assertEqual(claude["sessionCounts"], {"active": 2, "idle": 3})
 
 
 if __name__ == "__main__":

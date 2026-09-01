@@ -14,24 +14,28 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .btt import (
-    bttcli_path,
-    data_dir,
-    extract_icons,
-    install_widgets,
-    run_cli,
-    uninstall_widgets,
-    validate_slot_count,
-    widget_uuid,
-)
 from .core import StateStore, codexbar_path
 from .server import serve
 
 LABEL = "com.vdustr.codexbar-touchbar"
+RENDERER_LABEL = f"{LABEL}.renderer"
+
+
+def data_dir() -> Path:
+    return Path(
+        os.environ.get(
+            "CODEXBAR_TOUCHBAR_DATA_DIR",
+            Path.home() / "Library/Application Support/CodexBarTouchBar",
+        )
+    ).expanduser().resolve()
 
 
 def launch_agent_path() -> Path:
     return Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+
+
+def renderer_launch_agent_path() -> Path:
+    return Path.home() / "Library/LaunchAgents" / f"{RENDERER_LABEL}.plist"
 
 
 def stop_service() -> None:
@@ -74,7 +78,6 @@ def install_service() -> None:
         "ProcessType": "Interactive",
         "EnvironmentVariables": {
             "CODEXBAR_TOUCHBAR_CODEXBAR": codexbar_path(),
-            "CODEXBAR_TOUCHBAR_BTTCLI": bttcli_path(),
             "CODEXBAR_TOUCHBAR_DATA_DIR": str(data_dir()),
         },
     }
@@ -113,22 +116,24 @@ def bridge_is_healthy() -> bool:
         try:
             with urllib.request.urlopen("http://127.0.0.1:4317/healthz", timeout=0.5) as response:
                 payload = json.loads(response.read())
-            if (
-                response.status == 200
-                and isinstance(payload, dict)
-                and payload.get("service") == "codexbar-touchbar"
-                and payload.get("ok") is True
-            ):
-                return True
+        except urllib.error.HTTPError as response:
+            try:
+                payload = json.loads(response.read())
+            except json.JSONDecodeError:
+                payload = None
+            finally:
+                response.close()
         except (OSError, urllib.error.URLError, json.JSONDecodeError):
-            pass
+            payload = None
+        if isinstance(payload, dict) and payload.get("service") == "codexbar-touchbar":
+            return True
         time.sleep(0.25)
     return False
 
 
-def launch_agent_loaded() -> bool:
+def launch_agent_loaded(label: str = LABEL) -> bool:
     result = subprocess.run(
-        ["/bin/launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
+        ["/bin/launchctl", "print", f"gui/{os.getuid()}/{label}"],
         capture_output=True,
         text=True,
     )
@@ -143,18 +148,12 @@ def doctor() -> int:
         codexbar_available = True
     except FileNotFoundError as error:
         checks["codexbar"] = str(error)
-    try:
-        lookup = run_cli("get_trigger", f"uuid={widget_uuid('Codex usage')}", check=False)
-        checks["betterTouchTool"] = (
-            bttcli_path()
-            and lookup.returncode == 0
-            and lookup.stdout.strip() not in {"", "null", "{}", "[]"}
-        )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        checks["betterTouchTool"] = False
     checks["launchAgentConfigured"] = launch_agent_path().is_file()
     checks["launchAgentLoaded"] = launch_agent_loaded()
+    checks["rendererLaunchAgentConfigured"] = renderer_launch_agent_path().is_file()
+    checks["rendererLaunchAgentLoaded"] = launch_agent_loaded(RENDERER_LABEL)
     checks["bridge"] = bridge_is_healthy()
+    checks["nativeRenderer"] = native_renderer_is_healthy()
     store = StateStore(usage_ttl=0, sessions_ttl=0)
     store.wait_for_initial_data()
     snapshot = store.snapshot()
@@ -162,10 +161,12 @@ def doctor() -> int:
     checks["usageProviders"] = [item.get("provider") for item in snapshot["usage"]]
     checks["errors"] = snapshot["errors"]
     ok = (
-        bool(checks.get("betterTouchTool"))
-        and bool(checks.get("launchAgentConfigured"))
+        bool(checks.get("launchAgentConfigured"))
         and bool(checks.get("launchAgentLoaded"))
+        and bool(checks.get("rendererLaunchAgentConfigured"))
+        and bool(checks.get("rendererLaunchAgentLoaded"))
         and bool(checks.get("bridge"))
+        and bool(checks.get("nativeRenderer"))
         and not snapshot["errors"]["sessions"]
         and "codex" not in snapshot["errors"]["usage"]
         and "codex" in checks["usageProviders"]
@@ -175,14 +176,39 @@ def doctor() -> int:
     return 0 if ok else 1
 
 
+def native_renderer_is_healthy() -> bool:
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:4317/healthz", timeout=0.5) as response:
+                payload = json.loads(response.read())
+        except urllib.error.HTTPError as response:
+            try:
+                payload = json.loads(response.read())
+            except json.JSONDecodeError:
+                payload = None
+            finally:
+                response.close()
+        except (OSError, urllib.error.URLError, json.JSONDecodeError):
+            payload = None
+        renderer = payload.get("nativeRenderer", {}) if isinstance(payload, dict) else {}
+        capabilities = renderer.get("capabilities", {})
+        if (
+            renderer.get("alive") is True
+            and isinstance(capabilities, dict)
+            and capabilities.get("systemModal") is True
+        ):
+            return True
+        time.sleep(0.25)
+    return False
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="codexbar-touchbar")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("serve")
-    install_parser = commands.add_parser("install")
-    install_parser.add_argument("--session-slots", default=4, type=int)
-    uninstall_parser = commands.add_parser("uninstall")
-    uninstall_parser.add_argument("--session-slots", default=4, type=int)
+    commands.add_parser("install")
+    commands.add_parser("uninstall")
     commands.add_parser("doctor")
     return parser
 
@@ -192,14 +218,9 @@ def main() -> None:
     if args.command == "serve":
         serve("127.0.0.1", 4317)
     elif args.command == "install":
-        # Prevent the previous service process from racing trigger replacement
-        # with stale update semantics during an in-place upgrade.
         restore_service = launch_agent_path().is_file()
         stop_service()
         try:
-            icons = extract_icons()
-            for result in install_widgets(args.session_slots):
-                print(result)
             install_service()
         except Exception as error:
             if restore_service:
@@ -210,12 +231,9 @@ def main() -> None:
                         f"Failed to restore the previous service: {type(restore_error).__name__}"
                     )
             raise
-        print(json.dumps({"icons": icons}))
+        print(json.dumps({"bridge": "installed"}))
     elif args.command == "uninstall":
-        validate_slot_count(args.session_slots)
         uninstall_service()
-        for name in uninstall_widgets(args.session_slots):
-            print(f"removed: {name}")
     elif args.command == "doctor":
         raise SystemExit(doctor())
 

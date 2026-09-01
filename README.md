@@ -1,7 +1,8 @@
 # CodexBar Touch Bar
 
 CodexBar Touch Bar adds Codex Desktop tasks and coding-agent usage limits to the
-macOS Touch Bar through BetterTouchTool.
+macOS Touch Bar with an open-source native Swift host. BetterTouchTool is not
+required.
 
 It reads the same local task registry used by Codex Desktop and overlays the
 active runtime state reported by CodexBar. CodexBar remains isolated behind the
@@ -41,7 +42,7 @@ conversation titles.
 Tapping a usage item opens or focuses its desktop application. Tapping a Codex
 task opens the exact `codex://threads/<id>` link produced by Codex Desktop's own
 Copy deeplink command. Physical Touch Bar validation remains distinct from
-scripted BTT dispatch.
+scripted action verification.
 
 ## Capability sources
 
@@ -56,13 +57,14 @@ adapter can replace CodexBar without changing the task or Touch Bar layers.
 
 ## Requirements
 
-- macOS with a Touch Bar or BetterTouchTool Touch Bar simulator
+- macOS 13 or newer with a Touch Bar
 - [CodexBar](https://github.com/steipete/CodexBar)
-- [BetterTouchTool](https://folivora.ai/)
 - Python 3.11 or newer
+- Swift 5.10 or newer
 
-Enable BetterTouchTool's Accessibility permission, Touch Bar support, and CLI
-socket before installation.
+The native host uses a runtime-detected private macOS Touch Bar API for the
+global Control Strip item and system modal. Unsupported systems retain the menu
+bar status item but cannot provide the global Touch Bar surface.
 
 ## Install
 
@@ -72,11 +74,10 @@ cd codexbar-touchbar
 ./scripts/install.sh
 ```
 
-The installer creates an isolated virtual environment under
-`~/Library/Application Support/CodexBarTouchBar`, installs a per-user
-LaunchAgent, extracts icons from locally installed desktop applications, and
-installs three quota widgets plus up to four dynamic Codex task widgets. Empty
-task slots are removed. It does not redistribute application icons.
+The installer creates an isolated Python environment and native app under
+`~/Library/Application Support/CodexBarTouchBar` and installs separate per-user
+LaunchAgents for the local bridge and renderer. Icons are loaded at runtime from
+the installed desktop applications and are never redistributed.
 
 Verify the installation:
 
@@ -93,7 +94,9 @@ To update, pull the latest `main` branch and run `./scripts/install.sh` again.
 ./scripts/uninstall.sh
 ```
 
-The uninstaller retains logs and extracted icons and reports their location.
+The uninstaller removes the native app and both LaunchAgents. It also removes
+legacy widgets created by older BetterTouchTool-based versions when the BTT CLI
+is available. Logs remain in the data directory for diagnosis.
 
 ## Agent setup skill
 
@@ -105,7 +108,7 @@ integration with the required readback checks.
 
 The bridge binds only to loopback. Task focus validates the requested ID
 against the current Codex Desktop task registry, and provider focus accepts
-only the three configured providers. The compact BetterTouchTool endpoint omits
+only the three configured providers. The renderer endpoint omits
 transcript paths and account metadata.
 
 ## License

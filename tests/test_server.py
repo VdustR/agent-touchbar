@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import threading
 import unittest
 from http.client import HTTPConnection
@@ -9,7 +8,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 from unittest.mock import patch
 
-from codexbar_touchbar.server import ActionTracker, BttUpdateTracker, handler_factory, task_fingerprint
+from codexbar_touchbar.server import ActionTracker, RendererTracker, handler_factory, task_fingerprint
 
 
 class FakeStore:
@@ -28,11 +27,16 @@ class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.tracker = ActionTracker()
-        cls.btt_tracker = BttUpdateTracker()
+        cls.renderer_tracker = RendererTracker()
+        cls.renderer_tracker.heartbeat({"controlStrip": True, "systemModal": True})
         cls.store = FakeStore()
         cls.server = ThreadingHTTPServer(
             ("127.0.0.1", 0),
-            handler_factory(cls.store, cls.tracker, cls.btt_tracker),
+            handler_factory(
+                cls.store,
+                cls.tracker,
+                cls.renderer_tracker,
+            ),
         )
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -43,9 +47,6 @@ class ServerTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         cls.thread.join()
-
-    def setUp(self) -> None:
-        self.btt_tracker.record_success()
 
     def request(self, method: str, path: str, payload: object | None = None, content_type: str = "application/json", host: str | None = None):
         connection = HTTPConnection("127.0.0.1", self.port, timeout=2)
@@ -64,41 +65,63 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["service"], "codexbar-touchbar")
         self.assertTrue(body["ok"])
-        self.assertTrue(body["bttUpdate"]["ok"])
         self.assertIsNone(body["lastAction"])
 
-    def test_btt_update_tracker_starts_pending(self) -> None:
-        pending = BttUpdateTracker().snapshot()
-        self.assertFalse(pending["ok"])
-        self.assertIsNone(pending["lastSuccessAt"])
-        self.assertIsNone(pending["errorType"])
-
-    def test_health_reports_and_clears_btt_update_failure(self) -> None:
-        self.btt_tracker.record_failure(subprocess.CalledProcessError(1, ["bttcli"]))
+    def test_health_requires_live_native_renderer(self) -> None:
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), handler_factory(self.store, renderer_tracker=RendererTracker())
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        connection = HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
         try:
-            status, body = self.request("GET", "/healthz")
-            self.assertEqual(status, 503)
-            self.assertFalse(body["bttUpdate"]["ok"])
-            self.assertEqual(body["bttUpdate"]["errorType"], "CalledProcessError")
-            self.assertNotIn("bttcli", json.dumps(body["bttUpdate"]))
+            connection.request("GET", "/healthz")
+            response = connection.getresponse()
+            body = json.loads(response.read())
         finally:
-            self.btt_tracker.record_success()
-        status, body = self.request("GET", "/healthz")
-        self.assertEqual(status, 200)
-        self.assertTrue(body["bttUpdate"]["ok"])
-        self.assertIsNone(body["bttUpdate"]["errorType"])
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join()
+        self.assertEqual(response.status, 503)
+        self.assertFalse(body["ok"])
+        self.assertFalse(body["nativeRenderer"]["alive"])
 
-    def test_health_uses_one_btt_update_snapshot(self) -> None:
-        stable = {"ok": True, "lastSuccessAt": "now", "errorType": None}
-        contradictory = {"ok": False, "lastSuccessAt": "now", "errorType": "RuntimeError"}
-        with patch.object(
-            self.btt_tracker, "snapshot", side_effect=[stable, contradictory]
-        ) as snapshot:
-            status, body = self.request("GET", "/healthz")
+    def test_native_state_contract_is_versioned_and_ordered(self) -> None:
+        status, body = self.request("GET", "/api/v1/state")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["schemaVersion"], 1)
+        self.assertEqual(
+            [item["id"] for item in body["items"]],
+            ["quota:codex", "quota:claude", "quota:antigravity"],
+        )
+
+    def test_renderer_heartbeat_reports_capabilities_without_identity(self) -> None:
+        status, body = self.request(
+            "POST",
+            "/api/v1/renderer/heartbeat",
+            {"capabilities": {"controlStrip": True, "systemModal": False}},
+        )
         self.assertEqual(status, 200)
         self.assertTrue(body["ok"])
-        self.assertEqual(body["bttUpdate"], stable)
-        snapshot.assert_called_once_with()
+        status, health = self.request("GET", "/healthz")
+        self.assertEqual(status, 503)
+        self.assertFalse(health["ok"])
+        self.assertTrue(health["nativeRenderer"]["alive"])
+        self.assertEqual(
+            health["nativeRenderer"]["capabilities"],
+            {"controlStrip": True, "systemModal": False},
+        )
+        self.assertNotIn("task", json.dumps(health["nativeRenderer"]))
+
+    def test_renderer_heartbeat_rejects_non_boolean_capabilities(self) -> None:
+        status, body = self.request(
+            "POST",
+            "/api/v1/renderer/heartbeat",
+            {"capabilities": {"controlStrip": "yes"}},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("capabilities", body["error"])
 
     def test_health_requires_codex_usage(self) -> None:
         self.store.include_usage = False
@@ -123,8 +146,26 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(action["target"], f"task:{task_fingerprint('valid')}")
         self.assertNotIn("valid", json.dumps(action))
 
+    def test_native_task_focus_records_privacy_safe_target(self) -> None:
+        status, body = self.request(
+            "POST", "/api/v1/actions/focus-task", {"taskId": "valid"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["target"], f"task:{task_fingerprint('valid')}")
+
+    @patch("codexbar_touchbar.server.subprocess.run")
+    def test_native_provider_focus_uses_allowlisted_app(self, run) -> None:
+        status, body = self.request(
+            "POST", "/api/v1/actions/focus-provider", {"provider": "claude"}
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        run.assert_called_once_with(
+            ["/usr/bin/open", "-a", "Claude"], check=True, timeout=8
+        )
+
     def test_rejects_non_loopback_host_header(self) -> None:
-        status, body = self.request("GET", "/api/btt", host="attacker.example")
+        status, body = self.request("GET", "/api/v1/state", host="attacker.example")
         self.assertEqual(status, 400)
         self.assertIn("Host", body["error"])
 
