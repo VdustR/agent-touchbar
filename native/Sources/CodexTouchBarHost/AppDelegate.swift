@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             userInfo: nil,
             repeats: true
         )
+        if let heartbeatTimer {
+            RunLoop.main.add(heartbeatTimer, forMode: .common)
+        }
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(didWake),
@@ -43,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         refreshTimer?.invalidate()
+        heartbeatTimer?.invalidate()
         heartbeatTimer?.invalidate()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         touchBarController.shutdown()

@@ -55,6 +55,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('PYTHON_BIN="$VENV_BACKUP/${PYTHON_BIN#"$VENV"/}"', script)
         self.assertIn("trap 'rollback_install 130' INT", script)
         self.assertIn("trap 'rollback_install 143' TERM", script)
+        transaction_start = script.index('mkdir -p "$INSTALL_ROOT" "$BIN_DIR"')
+        self.assertLess(
+            script.index('mv "$VENV_BACKUP" "$VENV"', transaction_start),
+            script.index("trap rollback_install ERR", transaction_start),
+        )
         self.assertLess(script.index('codexbar-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('codexbar-touchbar\" doctor')))
 
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:

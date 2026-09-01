@@ -86,8 +86,18 @@ fi
 PYTHON_BIN=$("$PYTHON_BIN" -c 'import sys; print(sys.executable)')
 
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-rm -rf "$VENV_BACKUP" "$APP_BACKUP"
-rm -f "$RENDERER_PLIST_BACKUP"
+if [ -d "$VENV_BACKUP" ]; then
+  rm -rf "$VENV"
+  mv "$VENV_BACKUP" "$VENV"
+fi
+if [ -d "$APP_BACKUP" ]; then
+  rm -rf "$APP_PATH"
+  mv "$APP_BACKUP" "$APP_PATH"
+fi
+if [ -f "$RENDERER_PLIST_BACKUP" ]; then
+  rm -f "$RENDERER_PLIST"
+  mv "$RENDERER_PLIST_BACKUP" "$RENDERER_PLIST"
+fi
 trap rollback_install ERR
 trap 'rollback_install 130' INT
 trap 'rollback_install 143' TERM
