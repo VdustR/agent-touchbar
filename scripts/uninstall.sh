@@ -20,6 +20,10 @@ if ! renderer_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1)
     *) echo "$renderer_output" >&2; exit 1 ;;
   esac
 fi
+renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -x agent-touchbar-host || true)
+if [ -n "$renderer_pids" ]; then
+  /bin/kill $renderer_pids
+fi
 rm -f "$RENDERER_PLIST"
 rm -rf "$RENDERER_APP" "$LEGACY_RENDERER_APP"
 

@@ -41,6 +41,19 @@ while /bin/launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; do
   fi
   sleep 0.1
 done
+renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -x agent-touchbar-host || true)
+if [ -n "$renderer_pids" ]; then
+  /bin/kill $renderer_pids
+fi
+exit_attempt=0
+while /usr/bin/pgrep -u "$(id -u)" -x agent-touchbar-host >/dev/null 2>&1; do
+  exit_attempt=$((exit_attempt + 1))
+  if [ "$exit_attempt" -ge 50 ]; then
+    echo "Timed out waiting for a manually launched renderer to exit." >&2
+    exit 1
+  fi
+  sleep 0.1
+done
 /bin/launchctl bootstrap "gui/$(id -u)" "$PLIST"
 /bin/launchctl kickstart "gui/$(id -u)/$LABEL"
 
