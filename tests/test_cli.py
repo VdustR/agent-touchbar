@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-from agent_touchbar.cli import bridge_is_healthy, doctor, install_service, launch_agent_loaded, main, native_renderer_is_healthy, stop_service, uninstall_service
+from agent_touchbar.cli import bridge_is_healthy, doctor, install_service, launch_agent_loaded, main, native_renderer_is_healthy, state_contract_is_healthy, stop_service, uninstall_service
 
 
 class CliTests(unittest.TestCase):
@@ -105,6 +105,7 @@ class CliTests(unittest.TestCase):
             patch("agent_touchbar.cli.renderer_launch_agent_path") as renderer_plist,
             patch("agent_touchbar.cli.bridge_is_healthy", return_value=True),
             patch("agent_touchbar.cli.native_renderer_is_healthy", return_value=renderer),
+            patch("agent_touchbar.cli.state_contract_is_healthy", return_value=True),
             patch("agent_touchbar.cli.launch_agent_loaded", return_value=True),
             patch("agent_touchbar.cli.StateStore") as store_type,
         ):
@@ -118,6 +119,27 @@ class CliTests(unittest.TestCase):
 
     def test_doctor_accepts_complete_native_install(self) -> None:
         self.assertEqual(self.doctor_result(True), 0)
+
+    def test_installation_doctor_does_not_collect_provider_data(self) -> None:
+        with (
+            patch("agent_touchbar.cli.codexbar_path", return_value="/bin/codexbar"),
+            patch("agent_touchbar.cli.launch_agent_path") as plist,
+            patch("agent_touchbar.cli.renderer_launch_agent_path") as renderer_plist,
+            patch("agent_touchbar.cli.bridge_is_healthy", return_value=True),
+            patch("agent_touchbar.cli.native_renderer_is_healthy", return_value=True),
+            patch("agent_touchbar.cli.state_contract_is_healthy", return_value=True),
+            patch("agent_touchbar.cli.launch_agent_loaded", return_value=True),
+            patch("agent_touchbar.cli.StateStore") as store_type,
+        ):
+            plist.return_value.is_file.return_value = True
+            renderer_plist.return_value.is_file.return_value = True
+            self.assertEqual(doctor(installation_only=True), 0)
+        store_type.assert_not_called()
+
+    def test_state_contract_requires_versioned_item_list(self) -> None:
+        response = BytesIO(b'{"schemaVersion":1,"items":[]}')
+        with patch("agent_touchbar.cli.urllib.request.urlopen", return_value=response):
+            self.assertTrue(state_contract_is_healthy())
 
     def test_renderer_health_reads_liveness_from_aggregate_503(self) -> None:
         error = HTTPError(

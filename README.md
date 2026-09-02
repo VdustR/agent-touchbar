@@ -110,6 +110,11 @@ Verify the installation:
 curl --fail http://127.0.0.1:4317/healthz
 ```
 
+The regular `doctor` command includes strict CodexBar provider checks. The
+transactional installer uses `doctor --installation-only` to validate the
+LaunchAgents, bridge, renderer heartbeat, and versioned state contract without
+making an external provider delay roll back a valid installation.
+
 ### Typography
 
 The renderer uses the macOS system font at 11 pt by default. Set any installed
