@@ -27,6 +27,12 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         installControlStrip()
     }
 
+    nonisolated static func defaultItemIdentifiers(
+        supportsSystemModalDismiss: Bool
+    ) -> [NSTouchBarItem.Identifier] {
+        supportsSystemModalDismiss ? [.nativeContent, .close] : [.nativeContent]
+    }
+
     func shutdown() {
         if let controlStripItem {
             TouchBarPrivateAPI.shared.removeControlStripItem(controlStripItem)
@@ -39,9 +45,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier(
             "com.vdustr.agent-touchbar.native"
         )
-        touchBar.defaultItemIdentifiers = TouchBarPrivateAPI.shared.supportsSystemModalDismiss
-            ? [.nativeContent, .close]
-            : [.nativeContent]
+        touchBar.defaultItemIdentifiers = Self.defaultItemIdentifiers(
+            supportsSystemModalDismiss: TouchBarPrivateAPI.shared.supportsSystemModalDismiss
+        )
         touchBar.customizationRequiredItemIdentifiers = [.nativeContent]
 
         stackView.orientation = .horizontal
