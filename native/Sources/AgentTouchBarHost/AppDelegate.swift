@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let bridge = BridgeClient()
+    private let lifecycle = AppLifecycleController()
     private lazy var touchBarController = TouchBarController(bridge: bridge)
     private var statusItem: NSStatusItem?
     private var refreshTimer: Timer?
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
+        lifecycle.ensureBridgeRunning()
         _ = touchBarController
         refresh()
         if ProcessInfo.processInfo.environment["AGENT_TOUCHBAR_PRESENT_ON_LAUNCH"] == "1" {
@@ -55,8 +57,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.title = "AI"
-        item.button?.toolTip = "Coding agent Touch Bar"
+        item.button?.image = NSImage(
+            systemSymbolName: "rectangle.and.hand.point.up.left",
+            accessibilityDescription: "Agent Touch Bar"
+        )
+        item.button?.image?.isTemplate = true
+        item.button?.toolTip = "Agent Touch Bar"
         let menu = NSMenu()
         let status = NSMenuItem(title: "Waiting for local bridge", action: nil, keyEquivalent: "")
         status.tag = 1
@@ -65,6 +71,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: "Show Touch Bar",
             action: #selector(showTouchBar),
             keyEquivalent: ""
+        ))
+        let hide = NSMenuItem(
+            title: "Hide Touch Bar",
+            action: #selector(hideTouchBar),
+            keyEquivalent: ""
+        )
+        hide.isEnabled = TouchBarPrivateAPI.shared.supportsSystemModalDismiss
+        menu.addItem(hide)
+        menu.addItem(.separator())
+        let login = NSMenuItem(
+            title: "Open at Login",
+            action: #selector(toggleOpenAtLogin(_:)),
+            keyEquivalent: ""
+        )
+        login.state = lifecycle.opensAtLogin ? .on : .off
+        menu.addItem(login)
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(
+            title: "Quit Agent Touch Bar",
+            action: #selector(quitApplication),
+            keyEquivalent: "q"
         ))
         item.menu = menu
         statusItem = item
@@ -120,6 +147,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showTouchBar() {
         touchBarController.showTouchBar()
+    }
+
+    @objc private func hideTouchBar() {
+        touchBarController.hideTouchBar()
+    }
+
+    @objc private func toggleOpenAtLogin(_ sender: NSMenuItem) {
+        let enabled = !lifecycle.opensAtLogin
+        do {
+            try lifecycle.setOpenAtLogin(enabled)
+            sender.state = enabled ? .on : .off
+        } catch {
+            NSSound.beep()
+        }
+    }
+
+    @objc private func quitApplication() {
+        lifecycle.quit {
+            NSApp.terminate(nil)
+        }
     }
 
 }

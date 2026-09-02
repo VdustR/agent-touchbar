@@ -98,10 +98,17 @@ cd agent-touchbar
 ./scripts/install.sh
 ```
 
-The installer creates an isolated Python environment and native app under
-`~/Library/Application Support/AgentTouchBar` and installs separate per-user
-LaunchAgents for the local bridge and renderer. Icons are loaded at runtime from
-the installed desktop applications and are never redistributed.
+The installer creates an isolated Python environment under
+`~/Library/Application Support/AgentTouchBar`, installs the native app at
+`~/Applications/Agent Touch Bar.app`, and installs separate per-user LaunchAgents
+for the local bridge and renderer. Icons are loaded at runtime from the installed
+desktop applications and are never redistributed.
+
+Open **Agent Touch Bar** from Spotlight or Finder to restart it after quitting.
+Its menu bar icon provides **Show Touch Bar**, **Hide Touch Bar**, **Open at
+Login**, and **Quit Agent Touch Bar**. Quit unloads both LaunchAgents so the
+renderer and background CodexBar collection stop together. Open at Login is
+enabled by default and preserves the user's selection across upgrades.
 
 Verify the installation:
 

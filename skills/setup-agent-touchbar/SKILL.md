@@ -16,7 +16,8 @@ Swift 5.10, and Python 3.11 or newer.
    prerequisites before making changes.
 3. Run `./scripts/install.sh`. This builds the native Swift app from the current
    checkout, creates an isolated Python environment, and installs both under
-   `~/Library/Application Support/AgentTouchBar`.
+   `~/Library/Application Support/AgentTouchBar`, with the launchable app at
+   `~/Applications/Agent Touch Bar.app`.
 4. Run `${AGENT_TOUCHBAR_BIN_DIR:-$HOME/.local/bin}/agent-touchbar doctor`.
 5. Verify `http://127.0.0.1:4317/healthz` and inspect one
    `http://127.0.0.1:4317/api/v1/state` response. Do not print transcripts,

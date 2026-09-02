@@ -12,6 +12,10 @@ final class TouchBarPrivateAPI {
         NSSelectorFromString("presentSystemModalTouchBar:systemTrayItemIdentifier:"),
         NSSelectorFromString("presentSystemModalFunctionBar:systemTrayItemIdentifier:"),
     ]
+    private let dismissSelectors = [
+        NSSelectorFromString("dismissSystemModalTouchBar:"),
+        NSSelectorFromString("dismissSystemModalFunctionBar:"),
+    ]
     private let framework: UnsafeMutableRawPointer?
     private let presence: PresenceFunction?
 
@@ -36,10 +40,15 @@ final class TouchBarPrivateAPI {
         presentSelectors.contains { (NSTouchBar.self as AnyObject).responds(to: $0) }
     }
 
+    var supportsSystemModalDismiss: Bool {
+        dismissSelectors.contains { (NSTouchBar.self as AnyObject).responds(to: $0) }
+    }
+
     var capabilities: [String: Bool] {
         [
             "controlStrip": supportsControlStrip,
             "systemModal": supportsSystemModal,
+            "systemModalDismiss": supportsSystemModalDismiss,
             "publicTouchBar": true,
         ]
     }
@@ -66,6 +75,15 @@ final class TouchBarPrivateAPI {
             with: touchBar,
             with: trayIdentifier.rawValue
         )
+        return true
+    }
+
+    @discardableResult
+    func dismiss(_ touchBar: NSTouchBar) -> Bool {
+        guard let selector = dismissSelectors.first(where: {
+            (NSTouchBar.self as AnyObject).responds(to: $0)
+        }) else { return false }
+        _ = (NSTouchBar.self as AnyObject).perform(selector, with: touchBar)
         return true
     }
 }

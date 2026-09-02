@@ -5,8 +5,9 @@ REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 INSTALL_ROOT="${AGENT_TOUCHBAR_INSTALL_ROOT:-$HOME/Library/Application Support/AgentTouchBar}"
 VENV="$INSTALL_ROOT/venv"
 VENV_BACKUP="$INSTALL_ROOT/venv.rollback"
-APP_PATH="$INSTALL_ROOT/Agent Touch Bar.app"
+APP_PATH="${AGENT_TOUCHBAR_APP_PATH:-$HOME/Applications/Agent Touch Bar.app}"
 APP_BACKUP="$INSTALL_ROOT/Agent Touch Bar.app.rollback"
+OLD_APP_PATH="$INSTALL_ROOT/Agent Touch Bar.app"
 BRIDGE_PLIST="$HOME/Library/LaunchAgents/com.vdustr.agent-touchbar.plist"
 RENDERER_PLIST="$HOME/Library/LaunchAgents/com.vdustr.agent-touchbar.renderer.plist"
 RENDERER_PLIST_BACKUP="$INSTALL_ROOT/renderer.plist.rollback"
@@ -21,6 +22,17 @@ HAD_APP=0
 HAD_RENDERER_PLIST=0
 HAD_LEGACY_BRIDGE=0
 HAD_LEGACY_RENDERER=0
+
+if OPEN_AT_LOGIN_VALUE=$(/usr/bin/defaults read com.vdustr.agent-touchbar.renderer openAtLogin 2>/dev/null); then
+  case "$OPEN_AT_LOGIN_VALUE" in
+    0|false|FALSE) OPEN_AT_LOGIN=0 ;;
+    *) OPEN_AT_LOGIN=1 ;;
+  esac
+else
+  OPEN_AT_LOGIN=1
+fi
+export AGENT_TOUCHBAR_OPEN_AT_LOGIN="$OPEN_AT_LOGIN"
+export AGENT_TOUCHBAR_APP_PATH="$APP_PATH"
 
 legacy_service_loaded() {
   /bin/launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1
@@ -187,5 +199,6 @@ rm -rf "$VENV_BACKUP" "$APP_BACKUP"
 rm -f "$RENDERER_PLIST_BACKUP" "$COMMIT_MARKER"
 rm -f "$LEGACY_COMMAND" "$LEGACY_BRIDGE_PLIST" "$LEGACY_RENDERER_PLIST"
 rm -rf "$LEGACY_INSTALL_ROOT"
+if [ "$OLD_APP_PATH" != "$APP_PATH" ]; then rm -rf "$OLD_APP_PATH"; fi
 
 echo "Installed agent-touchbar at $BIN_DIR/agent-touchbar"

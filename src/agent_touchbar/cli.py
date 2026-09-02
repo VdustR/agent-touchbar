@@ -68,11 +68,16 @@ def install_service() -> None:
         program_arguments = [str(executable.resolve()), "serve"]
     else:
         program_arguments = [sys.executable, "-m", "agent_touchbar", "serve"]
+    open_at_login = os.environ.get("AGENT_TOUCHBAR_OPEN_AT_LOGIN", "1") not in {
+        "0",
+        "false",
+        "FALSE",
+    }
     payload = {
         "Label": LABEL,
         "ProgramArguments": program_arguments,
-        "RunAtLoad": True,
-        "KeepAlive": True,
+        "RunAtLoad": open_at_login,
+        "KeepAlive": {"SuccessfulExit": False},
         "StandardOutPath": str(log_dir / "stdout.log"),
         "StandardErrorPath": str(log_dir / "stderr.log"),
         "ProcessType": "Interactive",
