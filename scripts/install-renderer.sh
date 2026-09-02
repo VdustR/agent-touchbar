@@ -27,6 +27,15 @@ if ! bootout_output=$(/bin/launchctl bootout "gui/$(id -u)/$LABEL" 2>&1); then
     *) echo "$bootout_output" >&2; exit 1 ;;
   esac
 fi
+unload_attempt=0
+while /bin/launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; do
+  unload_attempt=$((unload_attempt + 1))
+  if [ "$unload_attempt" -ge 50 ]; then
+    echo "Timed out waiting for the previous renderer LaunchAgent to unload." >&2
+    exit 1
+  fi
+  sleep 0.1
+done
 /bin/launchctl bootstrap "gui/$(id -u)" "$PLIST"
 /bin/launchctl kickstart "gui/$(id -u)/$LABEL"
 
