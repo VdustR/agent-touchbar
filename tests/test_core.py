@@ -22,9 +22,31 @@ class CoreTests(unittest.TestCase):
             with patch.dict(os.environ, {"AGENT_TOUCHBAR_TOOL": str(link)}):
                 self.assertEqual(find_executable("tool", ()), str(link))
 
-    def test_default_session_refresh_interval_throttles_codexbar_collection(self) -> None:
+    @patch("agent_touchbar.core.threading.Thread")
+    def test_default_session_refresh_waits_after_previous_collection(
+        self, thread
+    ) -> None:
         self.assertEqual(DEFAULT_SESSION_TTL, 10.0)
-        self.assertEqual(StateStore().sessions_ttl, DEFAULT_SESSION_TTL)
+        store = StateStore()
+        store.sessions.updated_at = 100.0
+
+        with patch("agent_touchbar.core.time.monotonic", return_value=109.99):
+            store._start_if_stale(
+                store.sessions,
+                store.sessions_ttl,
+                store._refresh_sessions,
+                "sessions",
+            )
+        thread.assert_not_called()
+
+        with patch("agent_touchbar.core.time.monotonic", return_value=110.0):
+            store._start_if_stale(
+                store.sessions,
+                store.sessions_ttl,
+                store._refresh_sessions,
+                "sessions",
+            )
+        thread.assert_called_once()
 
     @patch("agent_touchbar.core.subprocess.run")
     def test_codex_session_focus_uses_thread_deep_link(self, run) -> None:
