@@ -140,7 +140,22 @@ def launch_agent_loaded(label: str = LABEL) -> bool:
     return result.returncode == 0
 
 
-def doctor() -> int:
+def state_contract_is_healthy() -> bool:
+    try:
+        with urllib.request.urlopen(
+            "http://127.0.0.1:4317/api/v1/state", timeout=1
+        ) as response:
+            payload = json.loads(response.read())
+    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(payload, dict)
+        and payload.get("schemaVersion") == 1
+        and isinstance(payload.get("items"), list)
+    )
+
+
+def doctor(installation_only: bool = False) -> int:
     checks: dict[str, object] = {}
     codexbar_available = False
     try:
@@ -154,12 +169,7 @@ def doctor() -> int:
     checks["rendererLaunchAgentLoaded"] = launch_agent_loaded(RENDERER_LABEL)
     checks["bridge"] = bridge_is_healthy()
     checks["nativeRenderer"] = native_renderer_is_healthy()
-    store = StateStore(usage_ttl=0, sessions_ttl=0)
-    store.wait_for_initial_data()
-    snapshot = store.snapshot()
-    checks["sessionCount"] = len(snapshot["sessions"])
-    checks["usageProviders"] = [item.get("provider") for item in snapshot["usage"]]
-    checks["errors"] = snapshot["errors"]
+    checks["stateContract"] = state_contract_is_healthy()
     ok = (
         bool(checks.get("launchAgentConfigured"))
         and bool(checks.get("launchAgentLoaded"))
@@ -167,12 +177,30 @@ def doctor() -> int:
         and bool(checks.get("rendererLaunchAgentLoaded"))
         and bool(checks.get("bridge"))
         and bool(checks.get("nativeRenderer"))
-        and not snapshot["errors"]["sessions"]
-        and "codex" not in snapshot["errors"]["usage"]
-        and "codex" in checks["usageProviders"]
+        and bool(checks.get("stateContract"))
         and codexbar_available
     )
-    print(json.dumps({"ok": ok, "checks": checks}, indent=2, ensure_ascii=False))
+    if not installation_only:
+        store = StateStore(usage_ttl=0, sessions_ttl=0)
+        store.wait_for_initial_data()
+        snapshot = store.snapshot()
+        checks["sessionCount"] = len(snapshot["sessions"])
+        checks["usageProviders"] = [item.get("provider") for item in snapshot["usage"]]
+        checks["errors"] = snapshot["errors"]
+        ok = (
+            ok
+            and not snapshot["errors"]["sessions"]
+            and "codex" not in snapshot["errors"]["usage"]
+            and "codex" in checks["usageProviders"]
+        )
+    mode = "installation" if installation_only else "full"
+    print(
+        json.dumps(
+            {"ok": ok, "mode": mode, "checks": checks},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
     return 0 if ok else 1
 
 
@@ -209,7 +237,8 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("serve")
     commands.add_parser("install")
     commands.add_parser("uninstall")
-    commands.add_parser("doctor")
+    doctor_parser = commands.add_parser("doctor")
+    doctor_parser.add_argument("--installation-only", action="store_true")
     return parser
 
 
@@ -235,7 +264,7 @@ def main() -> None:
     elif args.command == "uninstall":
         uninstall_service()
     elif args.command == "doctor":
-        raise SystemExit(doctor())
+        raise SystemExit(doctor(installation_only=args.installation_only))
 
 
 if __name__ == "__main__":

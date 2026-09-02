@@ -179,7 +179,8 @@ fi
 "$VENV/bin/python" -m pip install --disable-pip-version-check --quiet --upgrade "$REPO_ROOT"
 ln -sfn "$VENV/bin/agent-touchbar" "$BIN_DIR/agent-touchbar"
 AGENT_TOUCHBAR_DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/agent-touchbar" install "$@"
-AGENT_TOUCHBAR_DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" "$BIN_DIR/agent-touchbar" doctor
+AGENT_TOUCHBAR_DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}" \
+  "$BIN_DIR/agent-touchbar" doctor --installation-only
 : >"$COMMIT_MARKER"
 trap - ERR INT TERM HUP
 rm -rf "$VENV_BACKUP" "$APP_BACKUP"

@@ -52,7 +52,7 @@ class ScriptTests(unittest.TestCase):
 
     def test_installer_removes_legacy_install_only_after_new_doctor(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
-        doctor = script.index('agent-touchbar" doctor')
+        doctor = script.index('agent-touchbar" doctor --installation-only')
         self.assertGreater(script.index('rm -rf "$LEGACY_INSTALL_ROOT"'), doctor)
 
     def test_installer_restores_previous_bridge_when_validation_fails(self) -> None:
@@ -73,7 +73,13 @@ class ScriptTests(unittest.TestCase):
             script.index('mv "$VENV_BACKUP" "$VENV"', transaction_start),
             script.index("trap rollback_install ERR", transaction_start),
         )
-        self.assertLess(script.index('agent-touchbar\" doctor'), script.index('rm -rf "$VENV_BACKUP"', script.index('agent-touchbar\" doctor')))
+        installation_doctor = script.index(
+            'agent-touchbar\" doctor --installation-only'
+        )
+        self.assertLess(
+            installation_doctor,
+            script.index('rm -rf "$VENV_BACKUP"', installation_doctor),
+        )
 
     def test_uninstall_removes_venv_and_reports_configured_data_directory(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "uninstall.sh").read_text()
