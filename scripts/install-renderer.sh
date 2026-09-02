@@ -14,6 +14,16 @@ LABEL=com.vdustr.agent-touchbar.renderer
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$INSTALL_ROOT/logs"
 
+renderer_pids() {
+  /bin/ps -ww -axo uid=,pid=,comm= | /usr/bin/awk -v uid="$(id -u)" '
+    $1 == uid {
+      pid = $2
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "")
+      if ($0 ~ /\/agent-touchbar-host$/) print pid
+    }
+  '
+}
+
 mkdir -p "$INSTALL_ROOT" "$LOG_DIR" "$(dirname "$PLIST")" "$(dirname "$APP_PATH")"
 "$REPO_ROOT/native/build-app.sh" "$APP_PATH"
 
@@ -41,9 +51,9 @@ while /bin/launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; do
   fi
   sleep 0.1
 done
-renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -f '/agent-touchbar-host$' || true)
-if [ -n "$renderer_pids" ]; then
-  for renderer_pid in $renderer_pids; do
+running_renderer_pids=$(renderer_pids)
+if [ -n "$running_renderer_pids" ]; then
+  for renderer_pid in $running_renderer_pids; do
     if ! /bin/kill "$renderer_pid" 2>/dev/null && /bin/kill -0 "$renderer_pid" 2>/dev/null; then
       echo "Failed to stop renderer process $renderer_pid." >&2
       exit 1
@@ -51,7 +61,7 @@ if [ -n "$renderer_pids" ]; then
   done
 fi
 exit_attempt=0
-while /usr/bin/pgrep -u "$(id -u)" -f '/agent-touchbar-host$' >/dev/null 2>&1; do
+while [ -n "$(renderer_pids)" ]; do
   exit_attempt=$((exit_attempt + 1))
   if [ "$exit_attempt" -ge 50 ]; then
     echo "Timed out waiting for a manually launched renderer to exit." >&2

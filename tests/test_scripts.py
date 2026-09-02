@@ -38,9 +38,10 @@ class ScriptTests(unittest.TestCase):
             script.index('launchctl print "gui/$(id -u)/$LABEL"'),
             script.index('launchctl bootstrap "gui/$(id -u)" "$PLIST"'),
         )
-        self.assertIn("pgrep -u \"$(id -u)\" -f '/agent-touchbar-host$'", script)
+        self.assertIn("ps -ww -axo uid=,pid=,comm=", script)
+        self.assertIn("if ($0 ~ /\\/agent-touchbar-host$/) print pid", script)
         self.assertLess(
-            script.index("pgrep -u \"$(id -u)\" -f '/agent-touchbar-host$'"),
+            script.index("running_renderer_pids=$(renderer_pids)"),
             script.index('launchctl bootstrap "gui/$(id -u)" "$PLIST"'),
         )
         self.assertIn('! /bin/kill "$renderer_pid" 2>/dev/null', script)
@@ -121,7 +122,8 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('rm -f "$INSTALL_ROOT/install-transaction.committed"', script)
         self.assertIn('DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
         self.assertIn('remain at: $DATA_DIR', script)
-        self.assertIn("pgrep -u \"$(id -u)\" -f '/agent-touchbar-host$'", script)
+        self.assertIn("ps -ww -axo uid=,pid=,comm=", script)
+        self.assertIn("if ($0 ~ /\\/agent-touchbar-host$/) print pid", script)
         self.assertIn('! /bin/kill "$renderer_pid" 2>/dev/null', script)
         self.assertIn('/bin/kill -0 "$renderer_pid" 2>/dev/null', script)
 
