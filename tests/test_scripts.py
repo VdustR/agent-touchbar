@@ -38,11 +38,13 @@ class ScriptTests(unittest.TestCase):
             script.index('launchctl print "gui/$(id -u)/$LABEL"'),
             script.index('launchctl bootstrap "gui/$(id -u)" "$PLIST"'),
         )
-        self.assertIn('pgrep -u "$(id -u)" -x agent-touchbar-host', script)
+        self.assertIn("pgrep -u \"$(id -u)\" -f '/agent-touchbar-host$'", script)
         self.assertLess(
-            script.index('pgrep -u "$(id -u)" -x agent-touchbar-host'),
+            script.index("pgrep -u \"$(id -u)\" -f '/agent-touchbar-host$'"),
             script.index('launchctl bootstrap "gui/$(id -u)" "$PLIST"'),
         )
+        self.assertIn('! /bin/kill "$renderer_pid" 2>/dev/null', script)
+        self.assertIn('/bin/kill -0 "$renderer_pid" 2>/dev/null', script)
 
     def test_renderer_is_discoverable_and_intentional_quit_is_not_restarted(self) -> None:
         repository = Path(__file__).resolve().parents[1]
@@ -119,7 +121,9 @@ class ScriptTests(unittest.TestCase):
         self.assertIn('rm -f "$INSTALL_ROOT/install-transaction.committed"', script)
         self.assertIn('DATA_DIR="${AGENT_TOUCHBAR_DATA_DIR:-$INSTALL_ROOT}"', script)
         self.assertIn('remain at: $DATA_DIR', script)
-        self.assertIn('pgrep -u "$(id -u)" -x agent-touchbar-host', script)
+        self.assertIn("pgrep -u \"$(id -u)\" -f '/agent-touchbar-host$'", script)
+        self.assertIn('! /bin/kill "$renderer_pid" 2>/dev/null', script)
+        self.assertIn('/bin/kill -0 "$renderer_pid" 2>/dev/null', script)
 
 if __name__ == "__main__":
     unittest.main()

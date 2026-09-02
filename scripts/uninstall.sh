@@ -20,9 +20,14 @@ if ! renderer_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1)
     *) echo "$renderer_output" >&2; exit 1 ;;
   esac
 fi
-renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -x agent-touchbar-host || true)
+renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -f '/agent-touchbar-host$' || true)
 if [ -n "$renderer_pids" ]; then
-  /bin/kill $renderer_pids
+  for renderer_pid in $renderer_pids; do
+    if ! /bin/kill "$renderer_pid" 2>/dev/null && /bin/kill -0 "$renderer_pid" 2>/dev/null; then
+      echo "Failed to stop renderer process $renderer_pid." >&2
+      exit 1
+    fi
+  done
 fi
 rm -f "$RENDERER_PLIST"
 rm -rf "$RENDERER_APP" "$LEGACY_RENDERER_APP"

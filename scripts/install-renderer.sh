@@ -41,12 +41,17 @@ while /bin/launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; do
   fi
   sleep 0.1
 done
-renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -x agent-touchbar-host || true)
+renderer_pids=$(/usr/bin/pgrep -u "$(id -u)" -f '/agent-touchbar-host$' || true)
 if [ -n "$renderer_pids" ]; then
-  /bin/kill $renderer_pids
+  for renderer_pid in $renderer_pids; do
+    if ! /bin/kill "$renderer_pid" 2>/dev/null && /bin/kill -0 "$renderer_pid" 2>/dev/null; then
+      echo "Failed to stop renderer process $renderer_pid." >&2
+      exit 1
+    fi
+  done
 fi
 exit_attempt=0
-while /usr/bin/pgrep -u "$(id -u)" -x agent-touchbar-host >/dev/null 2>&1; do
+while /usr/bin/pgrep -u "$(id -u)" -f '/agent-touchbar-host$' >/dev/null 2>&1; do
   exit_attempt=$((exit_attempt + 1))
   if [ "$exit_attempt" -ge 50 ]; then
     echo "Timed out waiting for a manually launched renderer to exit." >&2
