@@ -88,22 +88,21 @@ final class AppLifecycleController {
     }
 
     func ensureBridgeRunning() {
-        guard !isLoaded(label: Self.bridgeLabel) else { return }
-        let url = launchAgentURL(label: Self.bridgeLabel)
-        guard fileManager.fileExists(atPath: url.path) else { return }
-        guard runLaunchctl(["bootstrap", domain, url.path]) else { return }
+        if !isLoaded(label: Self.bridgeLabel) {
+            let url = launchAgentURL(label: Self.bridgeLabel)
+            guard fileManager.fileExists(atPath: url.path) else { return }
+            guard runLaunchctl(["bootstrap", domain, url.path]) else { return }
+        }
         _ = runLaunchctl(["kickstart", "\(domain)/\(Self.bridgeLabel)"])
     }
 
     func quit(completion: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             _ = runLaunchctl(["bootout", "\(domain)/\(Self.bridgeLabel)"])
-            let rendererWasUnloaded = runLaunchctl([
+            _ = runLaunchctl([
                 "bootout", "\(domain)/\(Self.rendererLabel)",
             ])
-            if !rendererWasUnloaded {
-                DispatchQueue.main.async(execute: completion)
-            }
+            DispatchQueue.main.async(execute: completion)
         }
     }
 
