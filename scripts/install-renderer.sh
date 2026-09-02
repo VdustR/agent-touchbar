@@ -14,6 +14,16 @@ LABEL=com.vdustr.agent-touchbar.renderer
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$INSTALL_ROOT/logs"
 
+renderer_pids() {
+  /bin/ps -ww -axo uid=,pid=,comm= | /usr/bin/awk -v uid="$(id -u)" '
+    $1 == uid {
+      pid = $2
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "")
+      if ($0 ~ /\/agent-touchbar-host$/) print pid
+    }
+  '
+}
+
 mkdir -p "$INSTALL_ROOT" "$LOG_DIR" "$(dirname "$PLIST")" "$(dirname "$APP_PATH")"
 "$REPO_ROOT/native/build-app.sh" "$APP_PATH"
 
@@ -37,6 +47,24 @@ while /bin/launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; do
   unload_attempt=$((unload_attempt + 1))
   if [ "$unload_attempt" -ge 50 ]; then
     echo "Timed out waiting for the previous renderer LaunchAgent to unload." >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+running_renderer_pids=$(renderer_pids)
+if [ -n "$running_renderer_pids" ]; then
+  for renderer_pid in $running_renderer_pids; do
+    if ! /bin/kill "$renderer_pid" 2>/dev/null && /bin/kill -0 "$renderer_pid" 2>/dev/null; then
+      echo "Failed to stop renderer process $renderer_pid." >&2
+      exit 1
+    fi
+  done
+fi
+exit_attempt=0
+while [ -n "$(renderer_pids)" ]; do
+  exit_attempt=$((exit_attempt + 1))
+  if [ "$exit_attempt" -ge 50 ]; then
+    echo "Timed out waiting for a manually launched renderer to exit." >&2
     exit 1
   fi
   sleep 0.1

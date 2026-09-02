@@ -14,11 +14,30 @@ RENDERER_PLIST="$HOME/Library/LaunchAgents/$RENDERER_LABEL.plist"
 RENDERER_APP="${AGENT_TOUCHBAR_APP_PATH:-$HOME/Applications/Agent Touch Bar.app}"
 LEGACY_RENDERER_APP="$INSTALL_ROOT/Agent Touch Bar.app"
 
+renderer_pids() {
+  /bin/ps -ww -axo uid=,pid=,comm= | /usr/bin/awk -v uid="$(id -u)" '
+    $1 == uid {
+      pid = $2
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "")
+      if ($0 ~ /\/agent-touchbar-host$/) print pid
+    }
+  '
+}
+
 if ! renderer_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1); then
   case "$renderer_output" in
     *"Could not find service"*|*"Could not find specified service"*|*"No such process"*) ;;
     *) echo "$renderer_output" >&2; exit 1 ;;
   esac
+fi
+running_renderer_pids=$(renderer_pids)
+if [ -n "$running_renderer_pids" ]; then
+  for renderer_pid in $running_renderer_pids; do
+    if ! /bin/kill "$renderer_pid" 2>/dev/null && /bin/kill -0 "$renderer_pid" 2>/dev/null; then
+      echo "Failed to stop renderer process $renderer_pid." >&2
+      exit 1
+    fi
+  done
 fi
 rm -f "$RENDERER_PLIST"
 rm -rf "$RENDERER_APP" "$LEGACY_RENDERER_APP"
