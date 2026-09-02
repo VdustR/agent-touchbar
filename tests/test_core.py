@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_touchbar.core import CAPABILITIES, StateStore, compact_snapshot, find_executable, quota_windows, renderer_snapshot, session_sort_key
+from agent_touchbar.core import CAPABILITIES, DEFAULT_SESSION_TTL, StateStore, compact_snapshot, find_executable, quota_windows, renderer_snapshot, session_sort_key
 
 
 class CoreTests(unittest.TestCase):
@@ -22,8 +22,9 @@ class CoreTests(unittest.TestCase):
             with patch.dict(os.environ, {"AGENT_TOUCHBAR_TOOL": str(link)}):
                 self.assertEqual(find_executable("tool", ()), str(link))
 
-    def test_session_refresh_interval_prioritizes_interactive_updates(self) -> None:
-        self.assertLessEqual(StateStore().sessions_ttl, 0.75)
+    def test_default_session_refresh_interval_throttles_codexbar_collection(self) -> None:
+        self.assertEqual(DEFAULT_SESSION_TTL, 10.0)
+        self.assertEqual(StateStore().sessions_ttl, DEFAULT_SESSION_TTL)
 
     @patch("agent_touchbar.core.subprocess.run")
     def test_codex_session_focus_uses_thread_deep_link(self, run) -> None:

@@ -42,6 +42,10 @@ Sessions without a verified UI title are omitted instead of displaying a
 project path, worktree name, or internal identifier. Internal exec, review,
 subagent, archived, and CLI records are excluded.
 
+Session state refreshes no more often than every 10 seconds after the previous
+collection completes. This bounds CodexBar process churn while keeping task
+state updates interactive.
+
 Tapping a usage item opens or focuses its desktop application. Tapping a Codex
 task opens the exact `codex://threads/<id>` link produced by Codex Desktop's own
 Copy deeplink command. Claude Code and Antigravity session buttons focus their
