@@ -24,6 +24,7 @@ APP_NAMES = {"codex": "ChatGPT", "claude": "Claude", "antigravity": "Antigravity
 WINDOW_LABELS = {300: "5h", 10080: "7d"}
 ATTENTION_STATES = {"attention", "blocked", "needs_input", "waiting", "approval_required"}
 DISPLAY_STATES = ATTENTION_STATES | {"active", "idle", "available"}
+DEFAULT_SESSION_TTL = 10.0
 CAPABILITIES = {
     "codex": {
         "tasks": {"supported": True, "source": "codexDesktop"},
@@ -143,7 +144,7 @@ class StateStore:
     def __init__(
         self,
         usage_ttl: float = 60,
-        sessions_ttl: float = 0.75,
+        sessions_ttl: float = DEFAULT_SESSION_TTL,
         provider_adapter: ProviderAdapter | None = None,
     ) -> None:
         self.usage_ttl = usage_ttl
