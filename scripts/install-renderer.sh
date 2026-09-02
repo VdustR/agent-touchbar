@@ -28,5 +28,6 @@ if ! bootout_output=$(/bin/launchctl bootout "gui/$(id -u)/$LABEL" 2>&1); then
   esac
 fi
 /bin/launchctl bootstrap "gui/$(id -u)" "$PLIST"
+/bin/launchctl kickstart "gui/$(id -u)/$LABEL"
 
 echo "Installed native renderer at $APP_PATH"

@@ -104,6 +104,7 @@ rollback_install() {
   fi
   if [ -f "$RENDERER_PLIST" ]; then
     /bin/launchctl bootstrap "gui/$(id -u)" "$RENDERER_PLIST"
+    /bin/launchctl kickstart "gui/$(id -u)/com.vdustr.agent-touchbar.renderer"
   fi
   if [ "$HAD_VENV" -eq 1 ] && [ -x "$VENV/bin/agent-touchbar" ]; then
     ln -sfn "$VENV/bin/agent-touchbar" "$BIN_DIR/agent-touchbar"

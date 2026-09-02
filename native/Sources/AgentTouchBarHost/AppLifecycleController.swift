@@ -91,7 +91,8 @@ final class AppLifecycleController {
         guard !isLoaded(label: Self.bridgeLabel) else { return }
         let url = launchAgentURL(label: Self.bridgeLabel)
         guard fileManager.fileExists(atPath: url.path) else { return }
-        _ = runLaunchctl(["bootstrap", domain, url.path])
+        guard runLaunchctl(["bootstrap", domain, url.path]) else { return }
+        _ = runLaunchctl(["kickstart", "\(domain)/\(Self.bridgeLabel)"])
     }
 
     func quit(completion: @escaping () -> Void) {

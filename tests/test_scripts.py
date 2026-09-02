@@ -40,6 +40,7 @@ class ScriptTests(unittest.TestCase):
         bridge = (repository / "src" / "agent_touchbar" / "cli.py").read_text()
         self.assertIn('$HOME/Applications/Agent Touch Bar.app', renderer)
         self.assertIn("SuccessfulExit", renderer)
+        self.assertIn('launchctl kickstart "gui/$(id -u)/$LABEL"', renderer)
         self.assertIn('"KeepAlive": {"SuccessfulExit": False}', bridge)
         self.assertNotIn('/usr/bin/plutil -insert KeepAlive -bool true', renderer)
 

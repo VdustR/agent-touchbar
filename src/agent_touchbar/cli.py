@@ -89,11 +89,19 @@ def install_service() -> None:
     target.write_bytes(plistlib.dumps(payload))
     stop_service()
     subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(target)], check=True)
+    subprocess.run(
+        ["/bin/launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"],
+        check=True,
+    )
 
 
 def start_service() -> None:
     subprocess.run(
         ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(launch_agent_path())],
+        check=True,
+    )
+    subprocess.run(
+        ["/bin/launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"],
         check=True,
     )
 
