@@ -3,6 +3,21 @@ import XCTest
 @testable import AgentTouchBarHost
 
 final class ModelsTests: XCTestCase {
+    func testTouchBarCloseItemFollowsDismissCapability() {
+        let supported = TouchBarController.defaultItemIdentifiers(
+            supportsSystemModalDismiss: true
+        ).map(\.rawValue)
+        let unsupported = TouchBarController.defaultItemIdentifiers(
+            supportsSystemModalDismiss: false
+        ).map(\.rawValue)
+
+        XCTAssertEqual(supported, [
+            "com.vdustr.agent-touchbar.content",
+            "com.vdustr.agent-touchbar.close",
+        ])
+        XCTAssertEqual(unsupported, ["com.vdustr.agent-touchbar.content"])
+    }
+
     func testTouchBarViewportLeavesSystemControlStripVisible() {
         XCTAssertEqual(TouchBarLayout.viewportWidth(for: 40), 96)
         XCTAssertEqual(TouchBarLayout.viewportWidth(for: 300.2), 301)
