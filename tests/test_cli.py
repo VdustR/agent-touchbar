@@ -53,6 +53,23 @@ class CliTests(unittest.TestCase):
                 "AGENT_TOUCHBAR_CODEXBAR": "/custom/bin/codexbar",
                 "AGENT_TOUCHBAR_DATA_DIR": temporary,
             })
+            self.assertEqual(payload["KeepAlive"], {"SuccessfulExit": False})
+
+    @patch("agent_touchbar.cli.subprocess.run")
+    @patch("agent_touchbar.cli.codexbar_path", return_value="/custom/bin/codexbar")
+    def test_launch_agent_preserves_disabled_login_preference(self, _codexbar, run) -> None:
+        run.return_value.returncode = 0
+        with TemporaryDirectory() as temporary:
+            plist = Path(temporary) / "agent.plist"
+            with (
+                patch("agent_touchbar.cli.launch_agent_path", return_value=plist),
+                patch("agent_touchbar.cli.data_dir", return_value=Path(temporary)),
+                patch("agent_touchbar.cli.sys.argv", ["/custom/current/agent-touchbar"]),
+                patch.dict("agent_touchbar.cli.os.environ", {"AGENT_TOUCHBAR_OPEN_AT_LOGIN": "0"}),
+            ):
+                install_service()
+
+            self.assertFalse(plistlib.loads(plist.read_bytes())["RunAtLoad"])
 
     def test_install_replaces_bridge_service(self) -> None:
         events: list[str] = []

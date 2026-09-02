@@ -3,6 +3,7 @@ import AppKit
 private extension NSTouchBarItem.Identifier {
     static let nativeContent = NSTouchBarItem.Identifier("com.vdustr.agent-touchbar.content")
     static let nativeControlStrip = NSTouchBarItem.Identifier("com.vdustr.agent-touchbar.control-strip")
+    static let close = NSTouchBarItem.Identifier("com.vdustr.agent-touchbar.close")
 }
 
 @MainActor
@@ -38,7 +39,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         touchBar.customizationIdentifier = NSTouchBar.CustomizationIdentifier(
             "com.vdustr.agent-touchbar.native"
         )
-        touchBar.defaultItemIdentifiers = [.nativeContent]
+        touchBar.defaultItemIdentifiers = TouchBarPrivateAPI.shared.supportsSystemModalDismiss
+            ? [.nativeContent, .close]
+            : [.nativeContent]
         touchBar.customizationRequiredItemIdentifiers = [.nativeContent]
 
         stackView.orientation = .horizontal
@@ -83,6 +86,30 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         _ touchBar: NSTouchBar,
         makeItemForIdentifier identifier: NSTouchBarItem.Identifier
     ) -> NSTouchBarItem? {
+        if identifier == .close {
+            guard TouchBarPrivateAPI.shared.supportsSystemModalDismiss else { return nil }
+            let item = NSCustomTouchBarItem(identifier: identifier)
+            let button = NSButton(
+                image: NSImage(
+                    systemSymbolName: "xmark.circle.fill",
+                    accessibilityDescription: "Hide Agent Touch Bar"
+                ) ?? NSImage(),
+                target: self,
+                action: #selector(hideTouchBar)
+            )
+            button.imagePosition = .imageOnly
+            button.isBordered = false
+            button.toolTip = "Hide Agent Touch Bar"
+            button.setAccessibilityLabel("Hide Agent Touch Bar")
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 40),
+                button.heightAnchor.constraint(equalToConstant: 28),
+            ])
+            item.view = button
+            item.customizationLabel = "Hide Agent Touch Bar"
+            return item
+        }
         guard identifier == .nativeContent else { return nil }
         let item = NSCustomTouchBarItem(identifier: identifier)
         item.view = scrollView
@@ -218,6 +245,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             touchBar,
             trayIdentifier: .nativeControlStrip
         )
+    }
+
+    @objc func hideTouchBar() {
+        _ = TouchBarPrivateAPI.shared.dismiss(touchBar)
     }
 }
 

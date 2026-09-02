@@ -34,6 +34,22 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("Could not find specified service", script)
         self.assertNotIn('bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true', script)
 
+    def test_renderer_is_discoverable_and_intentional_quit_is_not_restarted(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        renderer = (repository / "scripts" / "install-renderer.sh").read_text()
+        bridge = (repository / "src" / "agent_touchbar" / "cli.py").read_text()
+        self.assertIn('$HOME/Applications/Agent Touch Bar.app', renderer)
+        self.assertIn("SuccessfulExit", renderer)
+        self.assertIn('launchctl kickstart "gui/$(id -u)/$LABEL"', renderer)
+        self.assertIn('"KeepAlive": {"SuccessfulExit": False}', bridge)
+        self.assertNotIn('/usr/bin/plutil -insert KeepAlive -bool true', renderer)
+
+    def test_installer_preserves_login_preference_and_removes_old_app(self) -> None:
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
+        self.assertIn("openAtLogin", script)
+        self.assertIn('export AGENT_TOUCHBAR_OPEN_AT_LOGIN="$OPEN_AT_LOGIN"', script)
+        self.assertIn('rm -rf "$OLD_APP_PATH"', script)
+
     def test_installer_stages_renderer_before_replacing_bridge(self) -> None:
         script = (Path(__file__).resolve().parents[1] / "scripts" / "install.sh").read_text()
         self.assertLess(

@@ -68,11 +68,16 @@ def install_service() -> None:
         program_arguments = [str(executable.resolve()), "serve"]
     else:
         program_arguments = [sys.executable, "-m", "agent_touchbar", "serve"]
+    open_at_login = os.environ.get("AGENT_TOUCHBAR_OPEN_AT_LOGIN", "1") not in {
+        "0",
+        "false",
+        "FALSE",
+    }
     payload = {
         "Label": LABEL,
         "ProgramArguments": program_arguments,
-        "RunAtLoad": True,
-        "KeepAlive": True,
+        "RunAtLoad": open_at_login,
+        "KeepAlive": {"SuccessfulExit": False},
         "StandardOutPath": str(log_dir / "stdout.log"),
         "StandardErrorPath": str(log_dir / "stderr.log"),
         "ProcessType": "Interactive",
@@ -84,11 +89,19 @@ def install_service() -> None:
     target.write_bytes(plistlib.dumps(payload))
     stop_service()
     subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(target)], check=True)
+    subprocess.run(
+        ["/bin/launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"],
+        check=True,
+    )
 
 
 def start_service() -> None:
     subprocess.run(
         ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(launch_agent_path())],
+        check=True,
+    )
+    subprocess.run(
+        ["/bin/launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"],
         check=True,
     )
 

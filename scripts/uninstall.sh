@@ -11,7 +11,8 @@ VENV_COMMAND="$INSTALL_ROOT/venv/bin/agent-touchbar"
 PLIST="$HOME/Library/LaunchAgents/com.vdustr.agent-touchbar.plist"
 RENDERER_LABEL=com.vdustr.agent-touchbar.renderer
 RENDERER_PLIST="$HOME/Library/LaunchAgents/$RENDERER_LABEL.plist"
-RENDERER_APP="$INSTALL_ROOT/Agent Touch Bar.app"
+RENDERER_APP="${AGENT_TOUCHBAR_APP_PATH:-$HOME/Applications/Agent Touch Bar.app}"
+LEGACY_RENDERER_APP="$INSTALL_ROOT/Agent Touch Bar.app"
 
 if ! renderer_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1); then
   case "$renderer_output" in
@@ -20,7 +21,7 @@ if ! renderer_output=$("$LAUNCHCTL" bootout "gui/$(id -u)/$RENDERER_LABEL" 2>&1)
   esac
 fi
 rm -f "$RENDERER_PLIST"
-rm -rf "$RENDERER_APP"
+rm -rf "$RENDERER_APP" "$LEGACY_RENDERER_APP"
 
 if [ -x "$COMMAND" ]; then
   "$COMMAND" uninstall "$@"
