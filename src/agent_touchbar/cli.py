@@ -187,7 +187,6 @@ def doctor(installation_only: bool = False) -> int:
         bool(checks.get("launchAgentConfigured"))
         and bool(checks.get("launchAgentLoaded"))
         and bool(checks.get("rendererLaunchAgentConfigured"))
-        and bool(checks.get("rendererLaunchAgentLoaded"))
         and bool(checks.get("bridge"))
         and bool(checks.get("nativeRenderer"))
         and bool(checks.get("stateContract"))

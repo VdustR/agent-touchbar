@@ -33,6 +33,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("Could not find service", script)
         self.assertIn("Could not find specified service", script)
         self.assertNotIn('bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true', script)
+        self.assertIn('launchctl print "gui/$(id -u)/$LABEL"', script)
+        self.assertLess(
+            script.index('launchctl print "gui/$(id -u)/$LABEL"'),
+            script.index('launchctl bootstrap "gui/$(id -u)" "$PLIST"'),
+        )
 
     def test_renderer_is_discoverable_and_intentional_quit_is_not_restarted(self) -> None:
         repository = Path(__file__).resolve().parents[1]
